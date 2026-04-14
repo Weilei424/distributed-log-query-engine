@@ -49,19 +49,21 @@
 **Plan:** `docs/superpowers/plans/2026-04-14-phase2-storage-ingest.md`
 **Spec:** `docs/superpowers/specs/2026-04-14-phase2-storage-ingest-design.md`
 
-- [ ] `internal/storage/record.go` — `WriteRecord`/`ReadRecord` length-prefix framing
-- [ ] `internal/storage/segment.go` — `OpenSegment`, `Append` (with fsync), `Size`, `Close`
-- [ ] `internal/storage/manager.go` — `NewManager`, `Append`, `SegmentPaths`, `Close`, size-based rotation, restart recovery
-- [ ] Segment files named as zero-padded 20-digit sequence numbers (`*.seg`)
-- [ ] `internal/ingest/server.go` — `IngestService` gRPC server with validation and `ReceivedAt` assignment
-- [ ] `protoToEntry` helper in `internal/ingest/server.go` keeps storage free of proto API types
-- [ ] `cmd/node/main.go` — real gRPC listener, env var config, graceful shutdown on SIGINT/SIGTERM
-- [ ] Unit tests: `record_test.go`, `segment_test.go`, `manager_test.go`
-- [ ] Unit tests: `ingest/server_test.go` covering validation, batch counts
-- [ ] Integration test: `test/integration/ingest_test.go` — ingest then restart then verify all records on disk
-- [ ] `make build` passes
-- [ ] `make test` passes — all unit and integration tests green
-- [ ] `make lint` passes
+### Status: Complete
+
+- [x] `internal/storage/record.go` — `WriteRecord`/`ReadRecord` length-prefix framing
+- [x] `internal/storage/segment.go` — `OpenSegment`, `Append` (with fsync), `Size`, `Close`
+- [x] `internal/storage/manager.go` — `NewManager`, `Append`, `SegmentPaths`, `Close`, size-based rotation, restart recovery
+- [x] Segment files named as zero-padded 20-digit sequence numbers (`*.seg`)
+- [x] `internal/ingest/server.go` — `IngestService` gRPC server with validation and `ReceivedAt` assignment
+- [x] `protoToEntry` helper in `internal/ingest/server.go` keeps storage free of proto API types
+- [x] `cmd/node/main.go` — real gRPC listener, env var config, graceful shutdown on SIGINT/SIGTERM
+- [x] Unit tests: `record_test.go`, `segment_test.go`, `manager_test.go`
+- [x] Unit tests: `ingest/server_test.go` covering validation, batch counts
+- [x] Integration test: `test/integration/ingest_test.go` — ingest then restart then verify all records on disk
+- [x] `make build` passes
+- [x] `make test` passes — all unit and integration tests green
+- [x] `make lint` passes
 
 ---
 
