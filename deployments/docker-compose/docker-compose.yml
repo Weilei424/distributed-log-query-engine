@@ -1,0 +1,47 @@
+services:
+  node-1:
+    build:
+      context: ../..
+      dockerfile: deployments/docker-compose/Dockerfile.node
+    environment:
+      - NODE_ID=node-1
+    ports:
+      - "50051:50051"
+    volumes:
+      - data-node-1:/data
+
+  node-2:
+    build:
+      context: ../..
+      dockerfile: deployments/docker-compose/Dockerfile.node
+    environment:
+      - NODE_ID=node-2
+    ports:
+      - "50052:50051"
+    volumes:
+      - data-node-2:/data
+
+  node-3:
+    build:
+      context: ../..
+      dockerfile: deployments/docker-compose/Dockerfile.node
+    environment:
+      - NODE_ID=node-3
+    ports:
+      - "50053:50051"
+    volumes:
+      - data-node-3:/data
+
+  coordinator-1:
+    build:
+      context: ../..
+      dockerfile: deployments/docker-compose/Dockerfile.coordinator
+    environment:
+      - NODE_ID=coordinator-1
+    ports:
+      - "50050:50050"
+
+volumes:
+  data-node-1:
+  data-node-2:
+  data-node-3:
