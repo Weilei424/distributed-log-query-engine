@@ -43,3 +43,6 @@ go.work.sum
 # OS
 .DS_Store
 Thumbs.db
+
+# AI agents
+.claude/
