@@ -24,7 +24,7 @@ See [`docs/planning/ARCHITECTURE_NOTES.md`](docs/planning/ARCHITECTURE_NOTES.md)
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Go | 1.22+ | https://go.dev/dl/ |
+| Go | 1.24+ | https://go.dev/dl/ |
 | buf | 1.32+ | `brew install bufbuild/buf/buf` |
 | protoc-gen-go | latest | `go install google.golang.org/protobuf/cmd/protoc-gen-go@latest` |
 | protoc-gen-go-grpc | latest | `go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest` |
