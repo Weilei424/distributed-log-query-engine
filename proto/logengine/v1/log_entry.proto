@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package logengine.v1;
+
+option go_package = "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1;logengine";
+
+// LogEntry represents a single log record stored and queried by the system.
+message LogEntry {
+  // Unique identifier for the log entry.
+  string id = 1;
+
+  // Producer-assigned Unix timestamp in nanoseconds.
+  int64 timestamp = 2;
+
+  // Ingest-path-assigned Unix timestamp in nanoseconds.
+  int64 received_at = 3;
+
+  // Name of the service that produced the log.
+  string service = 4;
+
+  // Log severity level (e.g. INFO, WARN, ERROR).
+  string level = 5;
+
+  // Human-readable log message.
+  string message = 6;
+
+  // Arbitrary structured metadata fields.
+  map<string, string> fields = 7;
+}

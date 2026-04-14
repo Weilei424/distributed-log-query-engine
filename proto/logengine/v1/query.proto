@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package logengine.v1;
+
+import "logengine/v1/log_entry.proto";
+
+option go_package = "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1;logengine";
+
+// QueryService executes search queries across the cluster.
+service QueryService {
+  // Query searches for log entries matching the given criteria.
+  rpc Query(QueryRequest) returns (QueryResponse);
+}
+
+message QueryRequest {
+  // Keyword to search for in log messages.
+  string keyword = 1;
+
+  // Filter by service name. Empty means all services.
+  string service = 2;
+
+  // Lower bound of the time range (Unix nanoseconds). 0 means unbounded.
+  int64 start_time = 3;
+
+  // Upper bound of the time range (Unix nanoseconds). 0 means unbounded.
+  int64 end_time = 4;
+
+  // Maximum number of entries to return. 0 uses server default (100).
+  int32 limit = 5;
+
+  // Number of entries to skip for pagination.
+  int32 offset = 6;
+}
+
+message QueryResponse {
+  // Matching log entries, sorted by timestamp descending.
+  repeated LogEntry entries = 1;
+
+  // Total number of matching entries across all nodes (before limit/offset).
+  int32 total = 2;
+
+  // True if one or more nodes did not respond within the deadline.
+  bool partial = 3;
+
+  // Total wall-clock time for the query in milliseconds.
+  int64 took_ms = 4;
+}

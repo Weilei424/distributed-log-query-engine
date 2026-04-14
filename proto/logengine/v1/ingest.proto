@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package logengine.v1;
+
+import "logengine/v1/log_entry.proto";
+
+option go_package = "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1;logengine";
+
+// IngestService accepts log entries from producers.
+service IngestService {
+  // Ingest writes a single log entry to the owning shard.
+  rpc Ingest(IngestRequest) returns (IngestResponse);
+
+  // IngestBatch writes multiple log entries in a single request.
+  rpc IngestBatch(IngestBatchRequest) returns (IngestBatchResponse);
+}
+
+message IngestRequest {
+  LogEntry entry = 1;
+}
+
+message IngestResponse {
+  // The assigned ID of the accepted entry.
+  string id = 1;
+
+  // True if the entry was durably written.
+  bool ok = 2;
+}
+
+message IngestBatchRequest {
+  repeated LogEntry entries = 1;
+}
+
+message IngestBatchResponse {
+  // Number of entries accepted and durably written.
+  int32 accepted = 1;
+
+  // Number of entries rejected due to validation or write failure.
+  int32 rejected = 2;
+}
