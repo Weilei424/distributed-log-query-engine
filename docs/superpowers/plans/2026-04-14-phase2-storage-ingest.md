@@ -6,7 +6,7 @@
 
 **Architecture:** Log records are serialized to protobuf and written as length-prefixed binary records to append-only segment files on disk. The storage layer is split into three focused units: record framing, single-segment file management, and a manager that owns the active segment and handles rotation. The gRPC IngestService server sits on top of the storage manager and is wired into a real long-running process in cmd/node.
 
-**Tech Stack:** Go 1.22, google.golang.org/grpc, google.golang.org/protobuf/proto, standard library (os, io, sync, encoding/binary)
+**Tech Stack:** Go 1.24, google.golang.org/grpc, google.golang.org/protobuf/proto, standard library (os, io, sync, encoding/binary)
 
 ---
 
