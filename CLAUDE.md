@@ -87,7 +87,7 @@ Do not add new infrastructure dependencies unless they solve a real problem in t
 The following docs are the source of truth, in this order:
 
 1. `docs/planning/IMPLEMENTATION_PLAN.md` or the current implementation plan document
-2. `docs/architecture/ARCHITECTURE_NOTES.md`
+2. `docs/planning/ARCHITECTURE_NOTES.md`
 3. `docs/planning/BACKLOG.md`
 4. `README.md`
 
