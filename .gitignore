@@ -30,3 +30,16 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Build outputs
+/bin/
+*.test
+*.out
+*.prof
+
+# Local node data
+/data/
+
+# OS
+.DS_Store
+Thumbs.db
