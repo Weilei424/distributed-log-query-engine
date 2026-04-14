@@ -40,11 +40,12 @@ git clone https://github.com/Weilei424/distributed-log-query-engine
 cd distributed-log-query-engine
 
 go mod download
-make proto
 make build
 make test
 make lint
 ```
+
+> `make proto` is only needed if you modify `.proto` files. Generated bindings are already committed.
 
 ---
 
