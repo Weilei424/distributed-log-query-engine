@@ -97,7 +97,7 @@ Phase 1 establishes the repository scaffold, Go module, build tooling, protobuf 
 | Field | Value |
 |-------|-------|
 | Module path | `github.com/Weilei424/distributed-log-query-engine` |
-| Go version | `1.22` |
+| Go version | `1.24` |
 | Phase 1 external deps | None beyond buf-generated gRPC libraries |
 
 ---
@@ -261,7 +261,7 @@ Sections to add or update:
 
 1. **Project description** — one paragraph describing the distributed log query engine
 2. **Architecture overview** — one-liner per major component (ingest, storage, index, metadata, coordinator)
-3. **Prerequisites** — Go 1.22+, Docker, `buf`, `golangci-lint`
+3. **Prerequisites** — Go 1.24+, Docker, `buf`, `golangci-lint`
 4. **Setup**
    ```bash
    go mod download
