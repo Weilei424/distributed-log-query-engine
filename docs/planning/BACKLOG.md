@@ -46,19 +46,22 @@
 
 ## Phase 2 — Single Node Ingestion and Storage Engine
 
-- [ ] `internal/storage` package: segment file struct and append logic
-- [ ] Segment rotation by size threshold
-- [ ] Segment rotation by time window
-- [ ] Segment header and metadata format defined and versioned
-- [ ] Write-ahead behavior: data is durable after local append
-- [ ] `cmd/node` binary wired to storage package
-- [ ] gRPC ingest endpoint (`Ingest` RPC) accepting `LogEntry` records
-- [ ] Validation of log entry schema on ingest
-- [ ] `received_at` timestamp assigned on ingest
-- [ ] Node restart restores segments and does not lose written logs
-- [ ] Unit tests: segment append, read-back correctness
-- [ ] Unit tests: segment rotation trigger
-- [ ] `make test` passes
+**Plan:** `docs/superpowers/plans/2026-04-14-phase2-storage-ingest.md`
+**Spec:** `docs/superpowers/specs/2026-04-14-phase2-storage-ingest-design.md`
+
+- [ ] `internal/storage/record.go` — `WriteRecord`/`ReadRecord` length-prefix framing
+- [ ] `internal/storage/segment.go` — `OpenSegment`, `Append` (with fsync), `Size`, `Close`
+- [ ] `internal/storage/manager.go` — `NewManager`, `Append`, `SegmentPaths`, `Close`, size-based rotation, restart recovery
+- [ ] Segment files named as zero-padded 20-digit sequence numbers (`*.seg`)
+- [ ] `internal/ingest/server.go` — `IngestService` gRPC server with validation and `ReceivedAt` assignment
+- [ ] `protoToEntry` helper in `internal/ingest/server.go` keeps storage free of proto API types
+- [ ] `cmd/node/main.go` — real gRPC listener, env var config, graceful shutdown on SIGINT/SIGTERM
+- [ ] Unit tests: `record_test.go`, `segment_test.go`, `manager_test.go`
+- [ ] Unit tests: `ingest/server_test.go` covering validation, batch counts
+- [ ] Integration test: `test/integration/ingest_test.go` — ingest then restart then verify all records on disk
+- [ ] `make build` passes
+- [ ] `make test` passes — all unit and integration tests green
+- [ ] `make lint` passes
 
 ---
 
