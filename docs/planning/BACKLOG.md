@@ -9,21 +9,38 @@
 
 ## Phase 1 — Project Foundation and System Design
 
-### Status: In progress
+### Status: Complete
+
+**Plan:** `docs/superpowers/plans/2026-04-14-phase1-foundation.md`
+**Spec:** `docs/superpowers/specs/2026-04-14-phase1-foundation-design.md`
 
 - [x] Repository initialized with initial commit
 - [x] `IMPLEMENTATION_PLAN.md` created in `docs/planning/`
 - [x] `ARCHITECTURE_NOTES.md` created in `docs/planning/`
 - [x] `CLAUDE.md` created with coding standards, working rules, and phase execution rules
-- [ ] Repository folder structure created (`cmd/`, `internal/`, `pkg/`, `proto/`, `deployments/`, `test/`)
-- [ ] Go module initialized (`go.mod`, `go.sum`)
-- [ ] Makefile with targets: `make test`, `make lint`, `make run-local`
-- [ ] Protobuf definitions for log ingestion and query API (`proto/`)
-- [ ] Initial gRPC service contracts for ingest and query
-- [ ] `pkg/types` package with core `LogEntry` type
-- [ ] Basic README updated with setup instructions and project scope
-- [ ] Docker Compose file for local multi-node development (`deployments/docker-compose/`)
-- [ ] Confirm `make run-local` starts a single node successfully
+- [x] `go.mod` initialized at `github.com/Weilei424/distributed-log-query-engine`, Go 1.22
+- [x] `.gitignore` updated with build outputs and local data paths
+- [x] `pkg/types/log_entry.go` — plain Go `LogEntry` struct (decoupled from proto)
+- [x] `internal/*/doc.go` placeholders for all 10 internal packages
+- [x] `cmd/node/main.go`, `cmd/coordinator/main.go`, `cmd/cli/main.go` stubs
+- [x] `Makefile` with `build`, `test`, `lint`, `run-local`, `proto`, `proto-lint` targets
+- [x] `.golangci.yml` with errcheck, govet, staticcheck, unused, gofmt
+- [x] `proto/buf.yaml` — buf module config with DEFAULT lint and FILE breaking rules
+- [x] `proto/logengine/v1/log_entry.proto` — LogEntry message
+- [x] `proto/logengine/v1/ingest.proto` — IngestService with Ingest and IngestBatch RPCs
+- [x] `proto/logengine/v1/query.proto` — QueryService with Query RPC
+- [x] `buf.gen.yaml` at repo root targeting `internal/api/gen/`
+- [x] `buf generate` produces Go bindings under `internal/api/gen/logengine/v1/`
+- [x] `go mod tidy` adds grpc and protobuf dependencies
+- [x] `deployments/docker-compose/Dockerfile.node` and `Dockerfile.coordinator` stubs
+- [x] `deployments/docker-compose/docker-compose.yml` — 3 node + 1 coordinator stubs
+- [x] `deployments/kubernetes/.gitkeep`, `test/integration/.gitkeep`, `test/fixtures/.gitkeep`
+- [x] `README.md` updated with architecture overview, prerequisites, setup commands, phase table
+- [x] `make build` passes — `go build ./...` exits 0
+- [x] `make test` passes — exits 0 (no tests yet)
+- [x] `make lint` passes — no lint errors
+- [x] `make proto-lint` passes — no proto lint errors
+- [x] `docker compose config` validates Docker Compose YAML
 
 ---
 
