@@ -31,7 +31,6 @@ Phase 1 establishes the repository scaffold, Go module, build tooling, protobuf 
 - No storage, indexing, or query logic (Phases 2–3)
 - No cluster coordination (Phase 4)
 - No Prometheus, Grafana, or Kubernetes (Phase 7)
-- No `internal/config` package — config shape is deferred until Phase 2 reveals real requirements
 
 ---
 
