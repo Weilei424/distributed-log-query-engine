@@ -6,7 +6,7 @@
 
 **Architecture:** All packages are stubs or placeholders in Phase 1 — no business logic is implemented. Proto files define the ingest and query service contracts. Generated Go bindings are committed to the repo. `pkg/types` holds a plain Go `LogEntry` struct that internal packages will use without importing generated proto code directly.
 
-**Tech Stack:** Go 1.22, buf v2, protoc-gen-go, protoc-gen-go-grpc, golangci-lint, Docker Compose v2
+**Tech Stack:** Go 1.24, buf v2, protoc-gen-go, protoc-gen-go-grpc, golangci-lint, Docker Compose v2
 
 ---
 
@@ -59,7 +59,7 @@ Verify `go.mod` was created:
 ```
 module github.com/Weilei424/distributed-log-query-engine
 
-go 1.22
+go 1.24
 ```
 
 - [ ] **Step 2: Append build and data entries to .gitignore**
@@ -91,7 +91,7 @@ Expected output:
 ```
 module github.com/Weilei424/distributed-log-query-engine
 
-go 1.22
+go 1.24
 ```
 
 **Suggested commit messages:**
@@ -660,7 +660,7 @@ Expected: no output, exit 0.
 - [ ] **Step 1: Create deployments/docker-compose/Dockerfile.node**
 
 ```dockerfile
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 WORKDIR /app
 COPY . .
 RUN go build -o /node ./cmd/node
@@ -673,7 +673,7 @@ ENTRYPOINT ["/node"]
 - [ ] **Step 2: Create deployments/docker-compose/Dockerfile.coordinator**
 
 ```dockerfile
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 WORKDIR /app
 COPY . .
 RUN go build -o /coordinator ./cmd/coordinator
@@ -793,7 +793,7 @@ See [`docs/planning/ARCHITECTURE_NOTES.md`](docs/planning/ARCHITECTURE_NOTES.md)
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Go | 1.22+ | https://go.dev/dl/ |
+| Go | 1.24+ | https://go.dev/dl/ |
 | buf | 1.32+ | `brew install bufbuild/buf/buf` |
 | protoc-gen-go | latest | `go install google.golang.org/protobuf/cmd/protoc-gen-go@latest` |
 | protoc-gen-go-grpc | latest | `go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest` |
