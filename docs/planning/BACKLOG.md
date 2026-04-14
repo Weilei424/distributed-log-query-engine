@@ -18,7 +18,7 @@
 - [x] `IMPLEMENTATION_PLAN.md` created in `docs/planning/`
 - [x] `ARCHITECTURE_NOTES.md` created in `docs/planning/`
 - [x] `CLAUDE.md` created with coding standards, working rules, and phase execution rules
-- [x] `go.mod` initialized at `github.com/Weilei424/distributed-log-query-engine`, Go 1.22
+- [x] `go.mod` initialized at `github.com/Weilei424/distributed-log-query-engine`, Go 1.24
 - [x] `.gitignore` updated with build outputs and local data paths
 - [x] `pkg/types/log_entry.go` — plain Go `LogEntry` struct (decoupled from proto)
 - [x] `internal/*/doc.go` placeholders for all 10 internal packages
