@@ -84,7 +84,7 @@ The project should demonstrate:
 Agents should treat these documents as operational context:
 
 - `docs/planning/IMPLEMENTATION_PLAN.md`
-- `docs/architecture/ARCHITECTURE_NOTES.md`
+- `docs/planning/ARCHITECTURE_NOTES.md`
 - `docs/planning/BACKLOG.md`
 - `README.md`
 
