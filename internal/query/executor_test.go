@@ -163,6 +163,43 @@ func TestExecute_OffsetBeyondTotal_ReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestExecute_EqualTimestamps_DeterministicOrder(t *testing.T) {
+	// Entries with the same timestamp must be ordered by ID (ascending) for stable pagination.
+	entries := []*types.LogEntry{
+		{ID: "c", Service: "svc", Message: "alpha", Timestamp: 100},
+		{ID: "a", Service: "svc", Message: "alpha", Timestamp: 100},
+		{ID: "b", Service: "svc", Message: "alpha", Timestamp: 100},
+	}
+	ex := newExecutor(t, entries)
+
+	result, err := ex.Execute(context.Background(), &types.QueryRequest{})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(result.Entries) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(result.Entries))
+	}
+	if result.Entries[0].ID != "a" || result.Entries[1].ID != "b" || result.Entries[2].ID != "c" {
+		t.Errorf("expected order a, b, c by ID tie-breaker; got %q %q %q",
+			result.Entries[0].ID, result.Entries[1].ID, result.Entries[2].ID)
+	}
+}
+
+func TestExecute_CanceledContext_ReturnsError(t *testing.T) {
+	entries := []*types.LogEntry{
+		{ID: "1", Service: "svc", Message: "alpha", Timestamp: 100},
+	}
+	ex := newExecutor(t, entries)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already canceled
+
+	_, err := ex.Execute(ctx, &types.QueryRequest{})
+	if err == nil {
+		t.Fatal("expected error for canceled context, got nil")
+	}
+}
+
 func TestExecute_KeywordPartialToken_NoMatch(t *testing.T) {
 	// Word-boundary semantics: "log" is not a token in "user login failed",
 	// so it must return no results through the full executor path.
