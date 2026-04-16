@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
+	"github.com/Weilei424/distributed-log-query-engine/internal/index"
 	"github.com/Weilei424/distributed-log-query-engine/internal/ingest"
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
 )
@@ -22,7 +23,7 @@ func newTestServer(t *testing.T) *ingest.Server {
 		t.Fatalf("NewManager: %v", err)
 	}
 	t.Cleanup(func() { m.Close() })
-	return ingest.NewServer(m)
+	return ingest.NewServer(m, index.NewIndex())
 }
 
 func TestIngest_Success(t *testing.T) {
@@ -92,7 +93,7 @@ func TestIngest_ReceivedAtIsSet(t *testing.T) {
 		t.Fatalf("NewManager: %v", err)
 	}
 	t.Cleanup(func() { m.Close() })
-	srv := ingest.NewServer(m)
+	srv := ingest.NewServer(m, index.NewIndex())
 
 	before := time.Now().UnixNano()
 	_, err = srv.Ingest(context.Background(), &logengine.IngestRequest{
