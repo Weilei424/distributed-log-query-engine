@@ -96,7 +96,7 @@ func TestIngest_ReceivedAtIsSet(t *testing.T) {
 	srv := ingest.NewServer(m, index.NewIndex())
 
 	before := time.Now().UnixNano()
-	_, err = srv.Ingest(context.Background(), &logengine.IngestRequest{
+	resp, err := srv.Ingest(context.Background(), &logengine.IngestRequest{
 		Entry: &logengine.LogEntry{Service: "svc", Message: "msg"}, // id omitted; server auto-generates
 	})
 	after := time.Now().UnixNano()
@@ -104,7 +104,12 @@ func TestIngest_ReceivedAtIsSet(t *testing.T) {
 		t.Fatalf("Ingest: %v", err)
 	}
 
-	// Read back and verify ReceivedAt is in [before, after]
+	// Response must carry the generated ID, not an empty string.
+	if resp.Id == "" {
+		t.Error("expected non-empty response ID for auto-generated entry")
+	}
+
+	// Read back and verify ReceivedAt is in [before, after] and stored ID matches response.
 	paths := m.SegmentPaths()
 	if len(paths) == 0 {
 		t.Fatal("no segment paths available")
@@ -124,6 +129,12 @@ func TestIngest_ReceivedAtIsSet(t *testing.T) {
 	}
 	if pb.ReceivedAt < before || pb.ReceivedAt > after {
 		t.Errorf("ReceivedAt=%d not in [%d, %d]", pb.ReceivedAt, before, after)
+	}
+	if pb.Id == "" {
+		t.Error("expected non-empty ID in stored proto for auto-generated entry")
+	}
+	if pb.Id != resp.Id {
+		t.Errorf("stored ID %q does not match response ID %q", pb.Id, resp.Id)
 	}
 }
 
