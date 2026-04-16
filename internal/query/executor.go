@@ -65,10 +65,17 @@ func (e *LocalExecutor) Execute(ctx context.Context, req *types.QueryRequest) (*
 		return nil, fmt.Errorf("offset must be non-negative")
 	}
 
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("query canceled: %w", err)
+	}
+
 	paths := e.index.Resolve(req.Keyword, req.Service, req.StartTime, req.EndTime)
 
 	var raw []*types.LogEntry
 	if len(paths) > 0 {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("query canceled before disk read: %w", err)
+		}
 		var err error
 		raw, err = e.manager.ReadSegments(paths)
 		if err != nil {
@@ -107,7 +114,10 @@ func (e *LocalExecutor) Execute(ctx context.Context, req *types.QueryRequest) (*
 	}
 
 	sort.Slice(filtered, func(i, j int) bool {
-		return filtered[i].Timestamp > filtered[j].Timestamp
+		if filtered[i].Timestamp != filtered[j].Timestamp {
+			return filtered[i].Timestamp > filtered[j].Timestamp
+		}
+		return filtered[i].ID < filtered[j].ID // stable tie-breaker for deterministic pagination
 	})
 
 	total := int32(len(filtered))
