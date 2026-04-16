@@ -26,6 +26,13 @@ func NewQueryServer(executor *LocalExecutor) *QueryServer {
 func (s *QueryServer) Query(ctx context.Context, req *logengine.QueryRequest) (*logengine.QueryResponse, error) {
 	start := time.Now()
 
+	if req.Limit < 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "limit must be non-negative")
+	}
+	if req.Offset < 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "offset must be non-negative")
+	}
+
 	typesReq := &types.QueryRequest{
 		Keyword:   req.Keyword,
 		Service:   req.Service,
