@@ -29,6 +29,9 @@ func NewLocalExecutor(idx *index.Index, manager *storage.Manager) *LocalExecutor
 func (e *LocalExecutor) Execute(ctx context.Context, req *types.QueryRequest) (*types.QueryResult, error) {
 	start := time.Now()
 
+	if req.Limit < 0 {
+		return nil, fmt.Errorf("limit must be non-negative")
+	}
 	if req.Limit == 0 {
 		req.Limit = defaultLimit
 	}
