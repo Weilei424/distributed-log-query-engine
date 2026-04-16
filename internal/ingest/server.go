@@ -30,6 +30,9 @@ func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*log
 	if req.Entry == nil {
 		return nil, status.Error(codes.InvalidArgument, "entry is required")
 	}
+	if req.Entry.Id == "" {
+		return nil, status.Error(codes.InvalidArgument, "entry.id is required")
+	}
 	if req.Entry.Service == "" {
 		return nil, status.Error(codes.InvalidArgument, "entry.service is required")
 	}
