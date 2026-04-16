@@ -69,21 +69,27 @@
 
 ## Phase 3 — Single Node Indexing and Query Engine
 
+**Plan:** `docs/superpowers/plans/2026-04-16-phase3-index-query.md`
+**Spec:** `docs/superpowers/specs/2026-04-16-phase3-index-query-design.md`
+
 - [ ] `internal/index` package: in-memory inverted index
 - [ ] Index updated on every successful segment append
-- [ ] Keyword token extraction and lookup
+- [ ] Keyword token extraction (lowercase, strip non-alphanumeric) and lookup
 - [ ] Time range index for segment-level pruning
-- [ ] Optional service-name to segment mapping
-- [ ] Query parser for keyword and time range parameters
+- [ ] Service-name to segment mapping
+- [ ] `pkg/types/query.go` — QueryRequest and QueryResult types
 - [ ] `internal/query` package: local query executor
-- [ ] Result sorting by timestamp
-- [ ] Pagination support (limit and offset or cursor)
+- [ ] Result sorting by timestamp descending
+- [ ] Pagination support (limit and offset)
 - [ ] gRPC query endpoint (`Query` RPC) wired to local index and segment scan
+- [ ] Index rebuilt from segment files on node startup (before accepting traffic)
 - [ ] Index stays consistent with newly ingested data
 - [ ] Unit tests: index insert and keyword lookup
 - [ ] Unit tests: time range pruning correctness
-- [ ] Unit tests: query parser
+- [ ] Unit tests: storage read path (ReadSegment, ReadSegments, ActiveSegmentPath)
+- [ ] Unit tests: query executor (keyword, time range, pagination, sort, no-filter)
 - [ ] Integration test: ingest then query on single node returns correct results
+- [ ] Integration test: index rebuilds correctly after node restart
 - [ ] `make test` passes
 
 ---
