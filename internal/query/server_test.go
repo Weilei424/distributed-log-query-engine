@@ -58,6 +58,23 @@ func TestQueryServer_NegativeOffset_InvalidArgument(t *testing.T) {
 	}
 }
 
+func TestQueryServer_CanceledContext_ReturnsCanceled(t *testing.T) {
+	srv := newQueryServer(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := srv.Query(ctx, &logengine.QueryRequest{})
+	if err == nil {
+		t.Fatal("expected error for canceled context, got nil")
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("expected gRPC status error, got %T: %v", err, err)
+	}
+	if st.Code() != codes.Canceled {
+		t.Errorf("expected codes.Canceled, got %v", st.Code())
+	}
+}
+
 // TestQueryServer_GRPCRoundTrip exercises the full gRPC encoding path: ingest via
 // IngestService RPC, query via QueryService RPC, verify proto response fields.
 func TestQueryServer_GRPCRoundTrip(t *testing.T) {
