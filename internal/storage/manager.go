@@ -74,7 +74,24 @@ func NewManager(dir string, maxSegmentBytes int64) (*Manager, error) {
 func (m *Manager) Append(entry *types.LogEntry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.appendLocked(entry)
+}
 
+// AppendWithPath writes entry to the active segment and returns the segment
+// path used for the write. The path is captured atomically under the
+// manager's lock, so the returned path is guaranteed to match the segment
+// the entry was actually written to.
+func (m *Manager) AppendWithPath(entry *types.LogEntry) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.appendLocked(entry); err != nil {
+		return "", err
+	}
+	return m.paths[len(m.paths)-1], nil
+}
+
+// appendLocked performs the actual append. Must be called with m.mu held.
+func (m *Manager) appendLocked(entry *types.LogEntry) error {
 	if m.active == nil {
 		return fmt.Errorf("append to closed manager")
 	}
