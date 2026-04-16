@@ -163,6 +163,23 @@ func TestExecute_OffsetBeyondTotal_ReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestExecute_KeywordPartialToken_NoMatch(t *testing.T) {
+	// Word-boundary semantics: "log" is not a token in "user login failed",
+	// so it must return no results through the full executor path.
+	entries := []*types.LogEntry{
+		{ID: "1", Service: "svc", Message: "user login failed", Timestamp: 100},
+	}
+	ex := newExecutor(t, entries)
+
+	result, err := ex.Execute(context.Background(), &types.QueryRequest{Keyword: "log"})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Total != 0 {
+		t.Errorf("expected Total=0 for partial-token keyword 'log', got %d", result.Total)
+	}
+}
+
 func TestExecute_NegativeLimit_ReturnsError(t *testing.T) {
 	entries := []*types.LogEntry{
 		{ID: "1", Service: "svc", Message: "alpha", Timestamp: 100},
