@@ -102,14 +102,24 @@ func (idx *Index) Resolve(keyword, service string, startTime, endTime int64) []s
 	}
 
 	// Intersect by keyword tokens (only when keyword is non-empty).
+	// The executor uses strings.Contains for final filtering, so the index must
+	// over-approximate: for each keyword token, collect any segment that has a stored
+	// token containing that keyword token as a substring (e.g. "log" matches "login").
 	if keyword != "" {
 		for _, tok := range tokenize(keyword) {
-			segs, ok := idx.tokenSegments[tok]
-			if !ok {
+			matching := make(map[string]struct{})
+			for storedTok, segs := range idx.tokenSegments {
+				if strings.Contains(storedTok, tok) {
+					for path := range segs {
+						matching[path] = struct{}{}
+					}
+				}
+			}
+			if len(matching) == 0 {
 				return nil
 			}
 			for path := range candidates {
-				if _, found := segs[path]; !found {
+				if _, found := matching[path]; !found {
 					delete(candidates, path)
 				}
 			}
