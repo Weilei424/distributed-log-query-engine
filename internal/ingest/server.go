@@ -2,6 +2,9 @@ package ingest
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -30,9 +33,6 @@ func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*log
 	if req.Entry == nil {
 		return nil, status.Error(codes.InvalidArgument, "entry is required")
 	}
-	if req.Entry.Id == "" {
-		return nil, status.Error(codes.InvalidArgument, "entry.id is required")
-	}
 	if req.Entry.Service == "" {
 		return nil, status.Error(codes.InvalidArgument, "entry.service is required")
 	}
@@ -42,6 +42,9 @@ func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*log
 
 	entry := protoToEntry(req.Entry)
 	entry.ReceivedAt = time.Now().UnixNano()
+	if entry.ID == "" {
+		entry.ID = generateID()
+	}
 
 	// TODO: propagate ctx to manager.AppendWithPath when storage layer supports cancellation.
 	segPath, err := s.manager.AppendWithPath(entry)
@@ -88,4 +91,15 @@ func protoToEntry(pb *logengine.LogEntry) *types.LogEntry {
 		Message:    pb.Message,
 		Fields:     pb.Fields,
 	}
+}
+
+// generateID returns a random ID for entries that omit one on ingest.
+// Format: "auto-<16 hex chars>", unique with overwhelming probability.
+func generateID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand failure is extremely unlikely; fall back to timestamp.
+		return fmt.Sprintf("auto-%d", time.Now().UnixNano())
+	}
+	return "auto-" + hex.EncodeToString(b)
 }
