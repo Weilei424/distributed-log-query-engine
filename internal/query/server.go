@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -44,6 +45,12 @@ func (s *QueryServer) Query(ctx context.Context, req *logengine.QueryRequest) (*
 
 	result, err := s.executor.Execute(ctx, typesReq)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil, status.Errorf(codes.Canceled, "query canceled")
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, status.Errorf(codes.DeadlineExceeded, "query deadline exceeded")
+		}
 		return nil, status.Errorf(codes.Internal, "query failed: %v", err)
 	}
 
