@@ -114,15 +114,16 @@ func TestRebuildFromSegments_ReadFnError(t *testing.T) {
 	}
 }
 
-func TestResolve_KeywordSubstringMatch(t *testing.T) {
-	// "log" is a substring of the token "login" — the index must over-approximate
-	// to match the executor's strings.Contains semantics.
+func TestResolve_KeywordPartialToken_NoMatch(t *testing.T) {
+	// The index uses word-boundary token matching, not substring matching.
+	// "log" is not a token in "user login failed"; it must not resolve any segment.
+	// Queries must use complete words (e.g. "login", not "log").
 	idx := index.NewIndex()
 	idx.Add(makeEntry("e1", "svc", "user login failed", 100), "/seg/a")
 
 	paths := idx.Resolve("log", "", 0, 0)
-	if len(paths) != 1 || paths[0] != "/seg/a" {
-		t.Errorf("expected [\"/seg/a\"] for substring keyword 'log' matching token 'login', got %v", paths)
+	if len(paths) != 0 {
+		t.Errorf("expected no segments for partial-token keyword 'log', got %v", paths)
 	}
 }
 
