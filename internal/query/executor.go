@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -11,6 +12,31 @@ import (
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
 	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
 )
+
+var nonAlphanumeric = regexp.MustCompile(`[^a-z0-9]+`)
+
+// tokenize lowercases s and splits on non-alphanumeric sequences, omitting empty tokens.
+// Must stay in sync with index.tokenize so executor and index use identical word boundaries.
+func tokenize(s string) []string {
+	parts := nonAlphanumeric.Split(strings.ToLower(s), -1)
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// tokenSet returns the set of tokens in s, for O(1) membership checks.
+func tokenSet(s string) map[string]struct{} {
+	toks := tokenize(s)
+	set := make(map[string]struct{}, len(toks))
+	for _, t := range toks {
+		set[t] = struct{}{}
+	}
+	return set
+}
 
 const defaultLimit = 100
 
@@ -50,11 +76,23 @@ func (e *LocalExecutor) Execute(ctx context.Context, req *types.QueryRequest) (*
 		}
 	}
 
-	kwLower := strings.ToLower(req.Keyword)
+	// Tokenize the keyword once; match requires all keyword tokens to appear as
+	// exact words in the message. This is consistent with how the index stores tokens.
+	kwTokens := tokenize(req.Keyword)
 	filtered := make([]*types.LogEntry, 0, len(raw))
 	for _, entry := range raw {
-		if req.Keyword != "" && !strings.Contains(strings.ToLower(entry.Message), kwLower) {
-			continue
+		if len(kwTokens) > 0 {
+			msgTokenSet := tokenSet(entry.Message)
+			match := true
+			for _, kwTok := range kwTokens {
+				if _, found := msgTokenSet[kwTok]; !found {
+					match = false
+					break
+				}
+			}
+			if !match {
+				continue
+			}
 		}
 		if req.Service != "" && entry.Service != req.Service {
 			continue
