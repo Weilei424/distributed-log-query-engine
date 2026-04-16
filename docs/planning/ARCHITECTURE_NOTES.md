@@ -213,7 +213,7 @@ LogEntry {
 ```
 
 ### Notes
-- `id` helps with de-duplication and debugging
+- `id` helps with de-duplication and debugging; if omitted by the producer, the ingest server assigns a random `auto-<hex>` ID so that all stored entries carry a non-empty ID
 - `timestamp` comes from producer when trusted
 - `received_at` is assigned by the ingest path for operational visibility
 - `fields` allows light structured metadata without forcing a rigid schema
