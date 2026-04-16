@@ -58,6 +58,20 @@ func TestIngest_NilEntry(t *testing.T) {
 	}
 }
 
+func TestIngest_MissingID(t *testing.T) {
+	srv := newTestServer(t)
+	_, err := srv.Ingest(context.Background(), &logengine.IngestRequest{
+		Entry: &logengine.LogEntry{Service: "svc", Message: "msg"},
+	})
+	if err == nil {
+		t.Fatal("expected error for missing id")
+	}
+	st, ok := status.FromError(err)
+	if !ok || st.Code() != codes.InvalidArgument {
+		t.Errorf("expected InvalidArgument, got %v", err)
+	}
+}
+
 func TestIngest_MissingService(t *testing.T) {
 	srv := newTestServer(t)
 	_, err := srv.Ingest(context.Background(), &logengine.IngestRequest{
@@ -97,7 +111,7 @@ func TestIngest_ReceivedAtIsSet(t *testing.T) {
 
 	before := time.Now().UnixNano()
 	_, err = srv.Ingest(context.Background(), &logengine.IngestRequest{
-		Entry: &logengine.LogEntry{Service: "svc", Message: "msg"},
+		Entry: &logengine.LogEntry{Id: "test-1", Service: "svc", Message: "msg"},
 	})
 	after := time.Now().UnixNano()
 	if err != nil {
