@@ -54,7 +54,7 @@ func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*log
 
 	s.idx.Add(entry, segPath)
 
-	return &logengine.IngestResponse{Id: req.Entry.Id, Ok: true}, nil
+	return &logengine.IngestResponse{Id: entry.ID, Ok: true}, nil
 }
 
 // IngestBatch writes multiple log entries to the storage layer.
