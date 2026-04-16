@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
+	"github.com/Weilei424/distributed-log-query-engine/internal/index"
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
 	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
 )
@@ -16,14 +17,15 @@ import (
 type Server struct {
 	logengine.UnimplementedIngestServiceServer
 	manager *storage.Manager
+	idx     *index.Index
 }
 
-// NewServer creates a new ingest Server backed by the given storage manager.
-func NewServer(manager *storage.Manager) *Server {
-	return &Server{manager: manager}
+// NewServer creates a new ingest Server backed by the given storage manager and index.
+func NewServer(manager *storage.Manager, idx *index.Index) *Server {
+	return &Server{manager: manager, idx: idx}
 }
 
-// Ingest writes a single log entry to the storage layer.
+// Ingest writes a single log entry to the storage layer and updates the index.
 func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*logengine.IngestResponse, error) {
 	if req.Entry == nil {
 		return nil, status.Error(codes.InvalidArgument, "entry is required")
@@ -38,10 +40,13 @@ func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*log
 	entry := protoToEntry(req.Entry)
 	entry.ReceivedAt = time.Now().UnixNano()
 
-	// TODO: propagate ctx to manager.Append when storage layer supports cancellation.
-	if err := s.manager.Append(entry); err != nil {
+	// TODO: propagate ctx to manager.AppendWithPath when storage layer supports cancellation.
+	segPath, err := s.manager.AppendWithPath(entry)
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "append failed: %v", err)
 	}
+
+	s.idx.Add(entry, segPath)
 
 	return &logengine.IngestResponse{Id: req.Entry.Id, Ok: true}, nil
 }
