@@ -12,7 +12,9 @@ import (
 	"google.golang.org/grpc"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
+	"github.com/Weilei424/distributed-log-query-engine/internal/index"
 	"github.com/Weilei424/distributed-log-query-engine/internal/ingest"
+	"github.com/Weilei424/distributed-log-query-engine/internal/query"
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
 )
 
@@ -27,10 +29,17 @@ func main() {
 		log.Fatalf("storage.NewManager: %v", err)
 	}
 
-	ingestSrv := ingest.NewServer(manager)
+	idx := index.NewIndex()
+	if err := idx.RebuildFromSegments(manager.SegmentPaths(), storage.ReadSegment); err != nil {
+		log.Fatalf("index rebuild: %v", err)
+	}
+
+	ingestSrv := ingest.NewServer(manager, idx)
+	querySrv := query.NewQueryServer(query.NewLocalExecutor(idx, manager))
 
 	grpcSrv := grpc.NewServer()
 	logengine.RegisterIngestServiceServer(grpcSrv, ingestSrv)
+	logengine.RegisterQueryServiceServer(grpcSrv, querySrv)
 
 	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
