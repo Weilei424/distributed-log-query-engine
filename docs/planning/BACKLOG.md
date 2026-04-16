@@ -98,6 +98,9 @@
 
 ## Phase 4 — Multi-Node Cluster Formation and Metadata Coordination
 
+**Plan:** `docs/superpowers/plans/2026-04-16-phase4-cluster-metadata.md`
+**Spec:** `docs/superpowers/specs/2026-04-16-phase4-cluster-metadata-design.md`
+
 - [ ] `internal/metadata` package: cluster state and node registry
 - [ ] Node self-registration on startup
 - [ ] Heartbeat mechanism for liveness tracking
