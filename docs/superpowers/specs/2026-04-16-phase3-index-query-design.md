@@ -21,7 +21,7 @@ The query proto contract (`QueryRequest` / `QueryResponse`) was defined in Phase
 | Index persistence across restart | None — rebuild on startup | Keeps v1 simple; persistence is a future upgrade |
 | Keyword tokenization | Lowercase, strip non-alphanumeric chars | Case-insensitive matching with no dependencies |
 | Index granularity | Segment-level pointers | Sufficient for small bounded segments; record-level offsets are a future upgrade |
-| Keyword filter at query time | `strings.Contains` after index prune | Index prunes candidates; filter ensures correctness |
+| Keyword filter at query time | Token-based word-boundary matching at both index and executor | Keeps index lookup O(1); avoids substring scan across all stored tokens; consistent semantics between index and executor |
 
 ---
 
@@ -134,7 +134,7 @@ func NewLocalExecutor(idx *index.Index, manager *storage.Manager) *LocalExecutor
 2. Call `e.index.Resolve(req.Keyword, req.Service, req.StartTime, req.EndTime)` → candidate segment paths.
 3. Call `e.manager.ReadSegments(paths)` → raw entries.
 4. Filter entries:
-   - If `Keyword` non-empty: `strings.Contains(strings.ToLower(entry.Message), strings.ToLower(req.Keyword))`.
+   - If `Keyword` non-empty: tokenize the keyword and the message; all keyword tokens must appear as exact words in the message token set (word-boundary matching, case-insensitive). This mirrors how the index stores and looks up tokens, keeping both layers semantically consistent and index lookup at O(1).
    - If `Service` non-empty: `entry.Service == req.Service`.
    - If `StartTime > 0`: `entry.Timestamp >= req.StartTime`.
    - If `EndTime > 0`: `entry.Timestamp <= req.EndTime`.
