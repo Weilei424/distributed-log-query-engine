@@ -1,0 +1,93 @@
+package query
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/Weilei424/distributed-log-query-engine/internal/index"
+	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
+	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
+)
+
+const defaultLimit = 100
+
+// LocalExecutor runs log queries against the local index and segment files.
+type LocalExecutor struct {
+	index   *index.Index
+	manager *storage.Manager
+}
+
+// NewLocalExecutor returns a LocalExecutor backed by idx and manager.
+func NewLocalExecutor(idx *index.Index, manager *storage.Manager) *LocalExecutor {
+	return &LocalExecutor{index: idx, manager: manager}
+}
+
+// Execute runs req against the local index and returns matching log entries.
+func (e *LocalExecutor) Execute(ctx context.Context, req *types.QueryRequest) (*types.QueryResult, error) {
+	start := time.Now()
+
+	if req.Limit == 0 {
+		req.Limit = defaultLimit
+	}
+	if req.Offset < 0 {
+		return nil, fmt.Errorf("offset must be non-negative")
+	}
+
+	paths := e.index.Resolve(req.Keyword, req.Service, req.StartTime, req.EndTime)
+
+	var raw []*types.LogEntry
+	if len(paths) > 0 {
+		var err error
+		raw, err = e.manager.ReadSegments(paths)
+		if err != nil {
+			return nil, fmt.Errorf("execute query: %w", err)
+		}
+	}
+
+	kwLower := strings.ToLower(req.Keyword)
+	filtered := make([]*types.LogEntry, 0, len(raw))
+	for _, entry := range raw {
+		if req.Keyword != "" && !strings.Contains(strings.ToLower(entry.Message), kwLower) {
+			continue
+		}
+		if req.Service != "" && entry.Service != req.Service {
+			continue
+		}
+		if req.StartTime > 0 && entry.Timestamp < req.StartTime {
+			continue
+		}
+		if req.EndTime > 0 && entry.Timestamp > req.EndTime {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].Timestamp > filtered[j].Timestamp
+	})
+
+	total := int32(len(filtered))
+
+	// Apply offset.
+	offset := int(req.Offset)
+	if offset > len(filtered) {
+		offset = len(filtered)
+	}
+	filtered = filtered[offset:]
+
+	// Apply limit.
+	limit := int(req.Limit)
+	if limit > len(filtered) {
+		limit = len(filtered)
+	}
+	filtered = filtered[:limit]
+
+	return &types.QueryResult{
+		Entries: filtered,
+		Total:   total,
+		TookMs:  time.Since(start).Milliseconds(),
+	}, nil
+}
