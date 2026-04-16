@@ -162,3 +162,15 @@ func TestExecute_OffsetBeyondTotal_ReturnsEmpty(t *testing.T) {
 		t.Errorf("expected 0 entries after offset exceeds total, got %d", len(result.Entries))
 	}
 }
+
+func TestExecute_NegativeLimit_ReturnsError(t *testing.T) {
+	entries := []*types.LogEntry{
+		{ID: "1", Service: "svc", Message: "alpha", Timestamp: 100},
+	}
+	ex := newExecutor(t, entries)
+
+	_, err := ex.Execute(context.Background(), &types.QueryRequest{Limit: -1})
+	if err == nil {
+		t.Fatal("expected error for negative limit, got nil")
+	}
+}
