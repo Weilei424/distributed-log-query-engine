@@ -114,6 +114,18 @@ func TestRebuildFromSegments_ReadFnError(t *testing.T) {
 	}
 }
 
+func TestResolve_KeywordSubstringMatch(t *testing.T) {
+	// "log" is a substring of the token "login" — the index must over-approximate
+	// to match the executor's strings.Contains semantics.
+	idx := index.NewIndex()
+	idx.Add(makeEntry("e1", "svc", "user login failed", 100), "/seg/a")
+
+	paths := idx.Resolve("log", "", 0, 0)
+	if len(paths) != 1 || paths[0] != "/seg/a" {
+		t.Errorf("expected [\"/seg/a\"] for substring keyword 'log' matching token 'login', got %v", paths)
+	}
+}
+
 func TestAdd_Concurrent(t *testing.T) {
 	idx := index.NewIndex()
 	var wg sync.WaitGroup
