@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -8,10 +9,12 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
+	"github.com/Weilei424/distributed-log-query-engine/internal/cluster"
 	"github.com/Weilei424/distributed-log-query-engine/internal/index"
 	"github.com/Weilei424/distributed-log-query-engine/internal/ingest"
 	"github.com/Weilei424/distributed-log-query-engine/internal/query"
@@ -21,8 +24,10 @@ import (
 func main() {
 	nodeID := envOrDefault("NODE_ID", "node-local")
 	dataDir := envOrDefault("DATA_DIR", "./data")
-	grpcAddr := envOrDefault("GRPC_PORT", ":50051")
+	grpcAddr := envOrDefault("GRPC_ADDR", ":50051")
 	maxSegBytes := envInt64OrDefault("MAX_SEGMENT_BYTES", 64*1024*1024)
+	coordinatorAddrs := envOrDefault("COORDINATOR_ADDRS", "")
+	heartbeatInterval := time.Duration(envIntOrDefault("HEARTBEAT_INTERVAL_SECONDS", 5)) * time.Second
 
 	manager, err := storage.NewManager(dataDir, maxSegBytes)
 	if err != nil {
@@ -46,6 +51,30 @@ func main() {
 		log.Fatalf("net.Listen %s: %v", grpcAddr, err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Register with the coordinator cluster if configured.
+	if coordinatorAddrs != "" {
+		addrs := cluster.ParseAddrs(coordinatorAddrs)
+		clusterClient, err := cluster.NewClusterClient(addrs, nodeID)
+		if err != nil {
+			log.Printf("cluster client init: %v (continuing without cluster registration)", err)
+		} else {
+			regCtx, regCancel := context.WithTimeout(ctx, 30*time.Second)
+			shards, err := clusterClient.Register(regCtx, grpcAddr)
+			regCancel()
+			if err != nil {
+				log.Printf("cluster register: %v (continuing in degraded mode)", err)
+			} else {
+				fmt.Printf("registered with coordinator: shards=%v\n", shards)
+			}
+			sender := cluster.NewHeartbeatSender(clusterClient, heartbeatInterval)
+			go sender.Run(ctx)
+			defer clusterClient.Close()
+		}
+	}
+
 	fmt.Printf("node started: id=%s addr=%s data=%s\n", nodeID, grpcAddr, dataDir)
 
 	stop := make(chan os.Signal, 1)
@@ -59,6 +88,7 @@ func main() {
 
 	<-stop
 	fmt.Println("shutting down...")
+	cancel()
 	grpcSrv.GracefulStop()
 	if err := manager.Close(); err != nil {
 		log.Printf("manager close: %v", err)
@@ -76,6 +106,15 @@ func envOrDefault(key, def string) string {
 func envInt64OrDefault(key string, def int64) int64 {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+func envIntOrDefault(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
 			return n
 		}
 	}
