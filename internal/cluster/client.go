@@ -100,6 +100,9 @@ func (c *ClusterClient) Register(ctx context.Context, grpcAddr string) ([]int, e
 }
 
 // SendHeartbeat sends a heartbeat to the coordinator leader.
+// On FAILED_PRECONDITION (not leader) or UNAVAILABLE (leader down / election in progress),
+// it advances to the next coordinator address and retries so that a leader failover does not
+// leave the node stranded on a dead coordinator indefinitely.
 func (c *ClusterClient) SendHeartbeat(ctx context.Context) error {
 	for attempt := 0; attempt < len(c.addrs)*2; attempt++ {
 		_, err := c.client.Heartbeat(ctx, &logengine.HeartbeatRequest{NodeId: c.nodeID})
@@ -108,15 +111,23 @@ func (c *ClusterClient) SendHeartbeat(ctx context.Context) error {
 		}
 		st, _ := status.FromError(err)
 		switch st.Code() {
+		case codes.Unavailable:
+			// Cluster may be mid-election; back off briefly before trying the next coordinator.
+			time.Sleep(500 * time.Millisecond)
+			fallthrough
 		case codes.FailedPrecondition:
+			// Not the leader or coordinator unavailable; try the next address.
 			if reconErr := c.advanceAndReconnect(); reconErr != nil {
 				return reconErr
 			}
 		default:
-			return err
+			// For any other error, advance rather than retrying the same coordinator.
+			if reconErr := c.advanceAndReconnect(); reconErr != nil {
+				return reconErr
+			}
 		}
 	}
-	return fmt.Errorf("heartbeat failed after retries")
+	return fmt.Errorf("heartbeat failed after retries: no reachable leader")
 }
 
 // Close closes the underlying gRPC connection.
