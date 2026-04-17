@@ -121,14 +121,16 @@ service ClusterService {
 ### RegisterNode
 
 - Request: `node_id`, `grpc_address`
-- Response: `assigned_shards` (repeated int32), `leader_address`
-- Write path — only leader processes; non-leader returns `FAILED_PRECONDITION` with leader address in error detail
+- Response: `assigned_shards` (repeated int32)
+- Write path — only leader processes; non-leader returns `FAILED_PRECONDITION`
+- Note: `leader_address` is not included in the response. `r.Leader()` returns the Raft TCP address, which differs from the gRPC address and cannot be used directly for client redirect. The client instead round-robins across `COORDINATOR_ADDRS` on `FAILED_PRECONDITION`.
 
 ### Heartbeat
 
 - Request: `node_id`
-- Response: `ok` (bool), `leader_address`
+- Response: `ok` (bool)
 - Write path — same leader enforcement as `RegisterNode`
+- Note: `leader_address` omitted for the same reason as `RegisterNode`.
 
 ### GetClusterState
 
@@ -211,11 +213,12 @@ Example response shape:
 
 Write RPCs (`RegisterNode`, `Heartbeat`) enforce leader-only writes:
 
-1. Non-leader coordinator checks `raft.Leader()` to get current leader address
-2. Returns gRPC status `FAILED_PRECONDITION` with the leader address as the error message
-3. `ClusterClient` on storage node: on `FAILED_PRECONDITION`, parse leader address, reconnect, retry once
-4. If the cluster has no leader yet (election in progress), coordinator returns `UNAVAILABLE`; client backs off with a short sleep (500ms) and retries up to 5 times before returning error
-5. If retry also fails after leader redirect, return error to caller; node retries on next heartbeat tick
+1. Non-leader coordinator returns gRPC status `FAILED_PRECONDITION`
+2. `ClusterClient` on the storage node: on `FAILED_PRECONDITION`, advance to the next address in `COORDINATOR_ADDRS` and retry (round-robin across the list)
+3. If the cluster has no leader yet (election in progress), coordinator returns `UNAVAILABLE`; client backs off 500ms and retries against the same address up to `len(addrs)*3` total attempts
+4. If all attempts fail, return error to caller; node retries registration on the next heartbeat interval tick
+
+Note: the original design called for returning `leader_address` in the response body and redirecting directly. This was replaced by round-robin because `r.Leader()` returns the Raft TCP transport address (e.g., `coordinator-1:7000`), which differs from the gRPC address (`coordinator-1:9000`) and cannot be used directly for client redirect without a separate address mapping. Round-robin across `COORDINATOR_ADDRS` achieves the same result for small clusters without this complexity.
 
 ---
 
