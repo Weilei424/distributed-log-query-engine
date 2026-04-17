@@ -101,19 +101,27 @@
 **Plan:** `docs/superpowers/plans/2026-04-16-phase4-cluster-metadata.md`
 **Spec:** `docs/superpowers/specs/2026-04-16-phase4-cluster-metadata-design.md`
 
-- [ ] `internal/metadata` package: cluster state and node registry
-- [ ] Node self-registration on startup
-- [ ] Heartbeat mechanism for liveness tracking
-- [ ] Shard ownership map stored in metadata layer
-- [ ] Raft-backed metadata leader election (HashiCorp Raft or equivalent)
-- [ ] Metadata leader serves cluster state reads
-- [ ] Node rejoin behavior after restart
-- [ ] `cmd/coordinator` binary or coordinator role within node binary
-- [ ] Cluster status endpoint or CLI view showing healthy and unhealthy nodes
-- [ ] Unit tests: shard ownership assignment logic
-- [ ] Integration test: three-node cluster forms and shows all nodes in registry
-- [ ] Integration test: node restart rejoins cluster correctly
-- [ ] `make test` passes
+### Status: Complete
+
+- [x] `internal/metadata/state.go` — NodeRecord, ShardRecord, ClusterState types with deep-copy clone
+- [x] `internal/metadata/fsm.go` — Raft FSM: Apply, Snapshot, Restore; CmdRegisterNode, CmdUpdateHeartbeat, CmdMarkUnhealthy; deterministic shard assignment (timestamps in payload, not in Apply)
+- [x] `internal/metadata/server.go` — gRPC ClusterService: RegisterNode, Heartbeat (leader-only), GetClusterState (any replica)
+- [x] `internal/metadata/liveness.go` — leader-only liveness checker; marks stale nodes unhealthy and releases their shards
+- [x] `proto/logengine/v1/cluster.proto` — ClusterService RPC definitions; buf generate produces Go bindings
+- [x] `internal/cluster/client.go` — ClusterClient with multi-address round-robin on FAILED_PRECONDITION; ParseAddrs helper
+- [x] `internal/cluster/heartbeat.go` — HeartbeatSender with Beater interface; ticker-based goroutine, stops on context cancel
+- [x] `cmd/coordinator/main.go` — full coordinator binary: Raft bootstrap (BoltDB + TCP transport), gRPC ClusterService, HTTP /status, liveness checker, graceful shutdown
+- [x] `cmd/node/main.go` — storage node updated: cluster registration with COORDINATOR_ADDRS, heartbeat sender goroutine, degraded mode if coordinator unreachable
+- [x] `deployments/docker-compose/docker-compose.yml` — 3 coordinator services with Raft env vars + 3 node services with COORDINATOR_ADDRS
+- [x] Unit tests: FSM RegisterNode, UpdateHeartbeat, MarkUnhealthy, SnapshotRestore (6 tests)
+- [x] Unit test: HeartbeatSender stops cleanly on context cancel
+- [x] Integration test: node registers and appears healthy in cluster state
+- [x] Integration test: GetClusterState returns all registered nodes
+- [x] Integration test: node restart rejoins cluster with shard reassignment
+- [x] Integration test: missed heartbeats mark node unhealthy and release shards
+- [x] `make test` passes
+- [x] `make lint` passes
+- [x] `make build` passes
 
 ---
 
