@@ -58,23 +58,34 @@ func main() {
 	defer cancel()
 
 	// Register with the coordinator cluster if configured.
+	// A background goroutine retries registration every heartbeatInterval until it succeeds,
+	// then transitions into the heartbeat loop. Both exit when ctx is cancelled.
 	if coordinatorAddrs != "" {
 		addrs := cluster.ParseAddrs(coordinatorAddrs)
 		clusterClient, err := cluster.NewClusterClient(addrs, nodeID)
 		if err != nil {
 			log.Printf("cluster client init: %v (continuing without cluster registration)", err)
 		} else {
-			regCtx, regCancel := context.WithTimeout(ctx, 30*time.Second)
-			shards, err := clusterClient.Register(regCtx, advertisedAddr)
-			regCancel()
-			if err != nil {
-				log.Printf("cluster register: %v (continuing in degraded mode)", err)
-			} else {
-				fmt.Printf("registered with coordinator: shards=%v\n", shards)
-				sender := cluster.NewHeartbeatSender(clusterClient, heartbeatInterval)
-				go sender.Run(ctx)
-			}
 			defer clusterClient.Close()
+			go func() {
+				for {
+					regCtx, regCancel := context.WithTimeout(ctx, 30*time.Second)
+					shards, err := clusterClient.Register(regCtx, advertisedAddr)
+					regCancel()
+					if err == nil {
+						fmt.Printf("registered with coordinator: shards=%v\n", shards)
+						sender := cluster.NewHeartbeatSender(clusterClient, heartbeatInterval)
+						sender.Run(ctx) // blocks until ctx cancelled
+						return
+					}
+					log.Printf("cluster register: %v (retrying in %s)", err, heartbeatInterval)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(heartbeatInterval):
+					}
+				}
+			}()
 		}
 	}
 
