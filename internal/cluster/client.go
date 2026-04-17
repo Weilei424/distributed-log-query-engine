@@ -112,19 +112,20 @@ func (c *ClusterClient) SendHeartbeat(ctx context.Context) error {
 		st, _ := status.FromError(err)
 		switch st.Code() {
 		case codes.Unavailable:
-			// Cluster may be mid-election; back off briefly before trying the next coordinator.
+			// Coordinator unreachable or mid-election; back off briefly then try the next address.
 			time.Sleep(500 * time.Millisecond)
-			fallthrough
+			if reconErr := c.advanceAndReconnect(); reconErr != nil {
+				return reconErr
+			}
 		case codes.FailedPrecondition:
-			// Not the leader or coordinator unavailable; try the next address.
+			// This coordinator is not the leader; try the next address.
 			if reconErr := c.advanceAndReconnect(); reconErr != nil {
 				return reconErr
 			}
 		default:
-			// For any other error, advance rather than retrying the same coordinator.
-			if reconErr := c.advanceAndReconnect(); reconErr != nil {
-				return reconErr
-			}
+			// Application-level error from the coordinator (e.g. node not found in metadata).
+			// Rotating to another coordinator would not help and would mask the real cause.
+			return err
 		}
 	}
 	return fmt.Errorf("heartbeat failed after retries: no reachable leader")
