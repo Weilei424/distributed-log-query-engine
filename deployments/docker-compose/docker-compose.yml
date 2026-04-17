@@ -1,14 +1,75 @@
 services:
+  coordinator-1:
+    build:
+      context: ../..
+      dockerfile: deployments/docker-compose/Dockerfile.coordinator
+    environment:
+      - RAFT_NODE_ID=coordinator-1
+      - RAFT_BIND_ADDR=coordinator-1:7000
+      - RAFT_DATA_DIR=/raft-data
+      - RAFT_PEERS=coordinator-1=coordinator-1:7000,coordinator-2=coordinator-2:7000,coordinator-3=coordinator-3:7000
+      - GRPC_ADDR=:9000
+      - HTTP_ADDR=:8080
+      - TOTAL_SHARDS=16
+    ports:
+      - "9001:9000"
+      - "8081:8080"
+    volumes:
+      - raft-data-1:/raft-data
+
+  coordinator-2:
+    build:
+      context: ../..
+      dockerfile: deployments/docker-compose/Dockerfile.coordinator
+    environment:
+      - RAFT_NODE_ID=coordinator-2
+      - RAFT_BIND_ADDR=coordinator-2:7000
+      - RAFT_DATA_DIR=/raft-data
+      - RAFT_PEERS=coordinator-1=coordinator-1:7000,coordinator-2=coordinator-2:7000,coordinator-3=coordinator-3:7000
+      - GRPC_ADDR=:9000
+      - HTTP_ADDR=:8080
+      - TOTAL_SHARDS=16
+    ports:
+      - "9002:9000"
+      - "8082:8080"
+    volumes:
+      - raft-data-2:/raft-data
+
+  coordinator-3:
+    build:
+      context: ../..
+      dockerfile: deployments/docker-compose/Dockerfile.coordinator
+    environment:
+      - RAFT_NODE_ID=coordinator-3
+      - RAFT_BIND_ADDR=coordinator-3:7000
+      - RAFT_DATA_DIR=/raft-data
+      - RAFT_PEERS=coordinator-1=coordinator-1:7000,coordinator-2=coordinator-2:7000,coordinator-3=coordinator-3:7000
+      - GRPC_ADDR=:9000
+      - HTTP_ADDR=:8080
+      - TOTAL_SHARDS=16
+    ports:
+      - "9003:9000"
+      - "8083:8080"
+    volumes:
+      - raft-data-3:/raft-data
+
   node-1:
     build:
       context: ../..
       dockerfile: deployments/docker-compose/Dockerfile.node
     environment:
       - NODE_ID=node-1
+      - GRPC_ADDR=:50051
+      - DATA_DIR=/data
+      - COORDINATOR_ADDRS=coordinator-1:9000,coordinator-2:9000,coordinator-3:9000
     ports:
       - "50051:50051"
     volumes:
       - data-node-1:/data
+    depends_on:
+      - coordinator-1
+      - coordinator-2
+      - coordinator-3
 
   node-2:
     build:
@@ -16,10 +77,17 @@ services:
       dockerfile: deployments/docker-compose/Dockerfile.node
     environment:
       - NODE_ID=node-2
+      - GRPC_ADDR=:50051
+      - DATA_DIR=/data
+      - COORDINATOR_ADDRS=coordinator-1:9000,coordinator-2:9000,coordinator-3:9000
     ports:
       - "50052:50051"
     volumes:
       - data-node-2:/data
+    depends_on:
+      - coordinator-1
+      - coordinator-2
+      - coordinator-3
 
   node-3:
     build:
@@ -27,21 +95,22 @@ services:
       dockerfile: deployments/docker-compose/Dockerfile.node
     environment:
       - NODE_ID=node-3
+      - GRPC_ADDR=:50051
+      - DATA_DIR=/data
+      - COORDINATOR_ADDRS=coordinator-1:9000,coordinator-2:9000,coordinator-3:9000
     ports:
       - "50053:50051"
     volumes:
       - data-node-3:/data
-
-  coordinator-1:
-    build:
-      context: ../..
-      dockerfile: deployments/docker-compose/Dockerfile.coordinator
-    environment:
-      - NODE_ID=coordinator-1
-    ports:
-      - "50050:50050"
+    depends_on:
+      - coordinator-1
+      - coordinator-2
+      - coordinator-3
 
 volumes:
+  raft-data-1:
+  raft-data-2:
+  raft-data-3:
   data-node-1:
   data-node-2:
   data-node-3:
