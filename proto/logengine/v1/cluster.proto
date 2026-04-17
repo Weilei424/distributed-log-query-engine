@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package logengine.v1;
+
+option go_package = "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1;logengine";
+
+// ClusterService manages node registration and cluster state.
+service ClusterService {
+  // RegisterNode is called by a storage node on startup to join the cluster.
+  // Only the Raft leader processes this request.
+  rpc RegisterNode(RegisterNodeRequest) returns (RegisterNodeResponse);
+
+  // Heartbeat is called periodically by storage nodes to signal liveness.
+  // Only the Raft leader processes this request.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+
+  // GetClusterState returns the current node registry and shard map.
+  // Any coordinator can serve this request.
+  rpc GetClusterState(GetClusterStateRequest) returns (GetClusterStateResponse);
+}
+
+message RegisterNodeRequest {
+  string node_id = 1;
+  string grpc_address = 2;
+}
+
+message RegisterNodeResponse {
+  repeated int32 assigned_shards = 1;
+}
+
+message HeartbeatRequest {
+  string node_id = 1;
+}
+
+message HeartbeatResponse {
+  bool ok = 1;
+}
+
+message GetClusterStateRequest {}
+
+message GetClusterStateResponse {
+  repeated NodeInfo nodes = 1;
+  repeated ShardInfo shards = 2;
+}
+
+message NodeInfo {
+  string id = 1;
+  string address = 2;
+  repeated int32 shards = 3;
+  string status = 4;
+  int64 last_seen_unix_ns = 5;
+}
+
+message ShardInfo {
+  int32 shard_id = 1;
+  string primary_node = 2;
+}
