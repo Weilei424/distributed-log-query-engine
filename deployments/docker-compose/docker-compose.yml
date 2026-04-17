@@ -60,6 +60,7 @@ services:
     environment:
       - NODE_ID=node-1
       - GRPC_ADDR=:50051
+      - NODE_GRPC_ADDR=node-1:50051
       - DATA_DIR=/data
       - COORDINATOR_ADDRS=coordinator-1:9000,coordinator-2:9000,coordinator-3:9000
     ports:
@@ -78,6 +79,7 @@ services:
     environment:
       - NODE_ID=node-2
       - GRPC_ADDR=:50051
+      - NODE_GRPC_ADDR=node-2:50051
       - DATA_DIR=/data
       - COORDINATOR_ADDRS=coordinator-1:9000,coordinator-2:9000,coordinator-3:9000
     ports:
@@ -96,6 +98,7 @@ services:
     environment:
       - NODE_ID=node-3
       - GRPC_ADDR=:50051
+      - NODE_GRPC_ADDR=node-3:50051
       - DATA_DIR=/data
       - COORDINATOR_ADDRS=coordinator-1:9000,coordinator-2:9000,coordinator-3:9000
     ports:
