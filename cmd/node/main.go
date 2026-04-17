@@ -25,6 +25,9 @@ func main() {
 	nodeID := envOrDefault("NODE_ID", "node-local")
 	dataDir := envOrDefault("DATA_DIR", "./data")
 	grpcAddr := envOrDefault("GRPC_ADDR", ":50051")
+	// NODE_GRPC_ADDR is the address advertised to the coordinator cluster — must be routable
+	// from other nodes (e.g. "node-1:50051" in Docker Compose). Defaults to grpcAddr for local dev.
+	advertisedAddr := envOrDefault("NODE_GRPC_ADDR", grpcAddr)
 	maxSegBytes := envInt64OrDefault("MAX_SEGMENT_BYTES", 64*1024*1024)
 	coordinatorAddrs := envOrDefault("COORDINATOR_ADDRS", "")
 	heartbeatInterval := time.Duration(envIntOrDefault("HEARTBEAT_INTERVAL_SECONDS", 5)) * time.Second
@@ -62,15 +65,15 @@ func main() {
 			log.Printf("cluster client init: %v (continuing without cluster registration)", err)
 		} else {
 			regCtx, regCancel := context.WithTimeout(ctx, 30*time.Second)
-			shards, err := clusterClient.Register(regCtx, grpcAddr)
+			shards, err := clusterClient.Register(regCtx, advertisedAddr)
 			regCancel()
 			if err != nil {
 				log.Printf("cluster register: %v (continuing in degraded mode)", err)
 			} else {
 				fmt.Printf("registered with coordinator: shards=%v\n", shards)
+				sender := cluster.NewHeartbeatSender(clusterClient, heartbeatInterval)
+				go sender.Run(ctx)
 			}
-			sender := cluster.NewHeartbeatSender(clusterClient, heartbeatInterval)
-			go sender.Run(ctx)
 			defer clusterClient.Close()
 		}
 	}
