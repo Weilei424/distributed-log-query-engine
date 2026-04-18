@@ -19,8 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IngestService_Ingest_FullMethodName      = "/logengine.v1.IngestService/Ingest"
-	IngestService_IngestBatch_FullMethodName = "/logengine.v1.IngestService/IngestBatch"
+	IngestService_Ingest_FullMethodName            = "/logengine.v1.IngestService/Ingest"
+	IngestService_IngestBatch_FullMethodName       = "/logengine.v1.IngestService/IngestBatch"
+	IngestService_ReplicateEntry_FullMethodName    = "/logengine.v1.IngestService/ReplicateEntry"
+	IngestService_FetchShardEntries_FullMethodName = "/logengine.v1.IngestService/FetchShardEntries"
 )
 
 // IngestServiceClient is the client API for IngestService service.
@@ -33,6 +35,12 @@ type IngestServiceClient interface {
 	Ingest(ctx context.Context, in *IngestRequest, opts ...grpc.CallOption) (*IngestResponse, error)
 	// IngestBatch writes multiple log entries in a single request.
 	IngestBatch(ctx context.Context, in *IngestBatchRequest, opts ...grpc.CallOption) (*IngestBatchResponse, error)
+	// ReplicateEntry is called by the primary to deliver an async replica copy.
+	// The receiving node writes directly to local storage — no further routing.
+	ReplicateEntry(ctx context.Context, in *ReplicateEntryRequest, opts ...grpc.CallOption) (*ReplicateEntryResponse, error)
+	// FetchShardEntries returns entries for a shard after a given received_at timestamp.
+	// Called by a replica node during catch-up after restart.
+	FetchShardEntries(ctx context.Context, in *FetchShardEntriesRequest, opts ...grpc.CallOption) (*FetchShardEntriesResponse, error)
 }
 
 type ingestServiceClient struct {
@@ -63,6 +71,26 @@ func (c *ingestServiceClient) IngestBatch(ctx context.Context, in *IngestBatchRe
 	return out, nil
 }
 
+func (c *ingestServiceClient) ReplicateEntry(ctx context.Context, in *ReplicateEntryRequest, opts ...grpc.CallOption) (*ReplicateEntryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReplicateEntryResponse)
+	err := c.cc.Invoke(ctx, IngestService_ReplicateEntry_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ingestServiceClient) FetchShardEntries(ctx context.Context, in *FetchShardEntriesRequest, opts ...grpc.CallOption) (*FetchShardEntriesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FetchShardEntriesResponse)
+	err := c.cc.Invoke(ctx, IngestService_FetchShardEntries_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IngestServiceServer is the server API for IngestService service.
 // All implementations should embed UnimplementedIngestServiceServer
 // for forward compatibility.
@@ -73,6 +101,12 @@ type IngestServiceServer interface {
 	Ingest(context.Context, *IngestRequest) (*IngestResponse, error)
 	// IngestBatch writes multiple log entries in a single request.
 	IngestBatch(context.Context, *IngestBatchRequest) (*IngestBatchResponse, error)
+	// ReplicateEntry is called by the primary to deliver an async replica copy.
+	// The receiving node writes directly to local storage — no further routing.
+	ReplicateEntry(context.Context, *ReplicateEntryRequest) (*ReplicateEntryResponse, error)
+	// FetchShardEntries returns entries for a shard after a given received_at timestamp.
+	// Called by a replica node during catch-up after restart.
+	FetchShardEntries(context.Context, *FetchShardEntriesRequest) (*FetchShardEntriesResponse, error)
 }
 
 // UnimplementedIngestServiceServer should be embedded to have
@@ -87,6 +121,12 @@ func (UnimplementedIngestServiceServer) Ingest(context.Context, *IngestRequest) 
 }
 func (UnimplementedIngestServiceServer) IngestBatch(context.Context, *IngestBatchRequest) (*IngestBatchResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method IngestBatch not implemented")
+}
+func (UnimplementedIngestServiceServer) ReplicateEntry(context.Context, *ReplicateEntryRequest) (*ReplicateEntryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReplicateEntry not implemented")
+}
+func (UnimplementedIngestServiceServer) FetchShardEntries(context.Context, *FetchShardEntriesRequest) (*FetchShardEntriesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FetchShardEntries not implemented")
 }
 func (UnimplementedIngestServiceServer) testEmbeddedByValue() {}
 
@@ -144,6 +184,42 @@ func _IngestService_IngestBatch_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IngestService_ReplicateEntry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReplicateEntryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServiceServer).ReplicateEntry(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IngestService_ReplicateEntry_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServiceServer).ReplicateEntry(ctx, req.(*ReplicateEntryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IngestService_FetchShardEntries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FetchShardEntriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServiceServer).FetchShardEntries(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IngestService_FetchShardEntries_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServiceServer).FetchShardEntries(ctx, req.(*FetchShardEntriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IngestService_ServiceDesc is the grpc.ServiceDesc for IngestService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -158,6 +234,14 @@ var IngestService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "IngestBatch",
 			Handler:    _IngestService_IngestBatch_Handler,
+		},
+		{
+			MethodName: "ReplicateEntry",
+			Handler:    _IngestService_ReplicateEntry_Handler,
+		},
+		{
+			MethodName: "FetchShardEntries",
+			Handler:    _IngestService_FetchShardEntries_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

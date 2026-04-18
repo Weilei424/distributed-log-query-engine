@@ -373,6 +373,7 @@ type ShardInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ShardId       int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
 	PrimaryNode   string                 `protobuf:"bytes,2,opt,name=primary_node,json=primaryNode,proto3" json:"primary_node,omitempty"`
+	ReplicaNode   string                 `protobuf:"bytes,3,opt,name=replica_node,json=replicaNode,proto3" json:"replica_node,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -421,6 +422,13 @@ func (x *ShardInfo) GetPrimaryNode() string {
 	return ""
 }
 
+func (x *ShardInfo) GetReplicaNode() string {
+	if x != nil {
+		return x.ReplicaNode
+	}
+	return ""
+}
+
 var File_logengine_v1_cluster_proto protoreflect.FileDescriptor
 
 const file_logengine_v1_cluster_proto_rawDesc = "" +
@@ -444,10 +452,11 @@ const file_logengine_v1_cluster_proto_rawDesc = "" +
 	"\aaddress\x18\x02 \x01(\tR\aaddress\x12\x16\n" +
 	"\x06shards\x18\x03 \x03(\x05R\x06shards\x12\x16\n" +
 	"\x06status\x18\x04 \x01(\tR\x06status\x12)\n" +
-	"\x11last_seen_unix_ns\x18\x05 \x01(\x03R\x0elastSeenUnixNs\"I\n" +
+	"\x11last_seen_unix_ns\x18\x05 \x01(\x03R\x0elastSeenUnixNs\"l\n" +
 	"\tShardInfo\x12\x19\n" +
 	"\bshard_id\x18\x01 \x01(\x05R\ashardId\x12!\n" +
-	"\fprimary_node\x18\x02 \x01(\tR\vprimaryNode2\x95\x02\n" +
+	"\fprimary_node\x18\x02 \x01(\tR\vprimaryNode\x12!\n" +
+	"\freplica_node\x18\x03 \x01(\tR\vreplicaNode2\x95\x02\n" +
 	"\x0eClusterService\x12U\n" +
 	"\fRegisterNode\x12!.logengine.v1.RegisterNodeRequest\x1a\".logengine.v1.RegisterNodeResponse\x12L\n" +
 	"\tHeartbeat\x12\x1e.logengine.v1.HeartbeatRequest\x1a\x1f.logengine.v1.HeartbeatResponse\x12^\n" +
