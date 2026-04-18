@@ -23,7 +23,7 @@ func TestIngestAndPersistAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
-	srv := ingest.NewServer(m, index.NewIndex())
+	srv := ingest.NewLocalServer(m, index.NewIndex())
 
 	entries := []*logengine.LogEntry{
 		{Id: "e1", Service: "svc-a", Level: "INFO", Message: "first message"},
@@ -98,7 +98,7 @@ func TestIngestBatch_AllEntriesOnDisk(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
-	srv := ingest.NewServer(m, index.NewIndex())
+	srv := ingest.NewLocalServer(m, index.NewIndex())
 
 	batch := &logengine.IngestBatchRequest{
 		Entries: []*logengine.LogEntry{
