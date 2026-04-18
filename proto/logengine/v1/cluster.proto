@@ -52,6 +52,7 @@ message NodeInfo {
 }
 
 message ShardInfo {
-  int32 shard_id = 1;
+  int32  shard_id     = 1;
   string primary_node = 2;
+  string replica_node = 3;
 }
