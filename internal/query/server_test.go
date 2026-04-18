@@ -86,7 +86,7 @@ func TestQueryServer_GRPCRoundTrip(t *testing.T) {
 	t.Cleanup(func() { m.Close() })
 
 	idx := index.NewIndex()
-	ingestSrv := ingest.NewServer(m, idx)
+	ingestSrv := ingest.NewLocalServer(m, idx)
 	querySrv := query.NewQueryServer(query.NewLocalExecutor(idx, m))
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
