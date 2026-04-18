@@ -46,10 +46,10 @@ func TestPhase5_CatchUp_ReplicaFetchesMissedEntries(t *testing.T) {
 		}
 	}
 	if svcForNodeA == "" {
-		nodeB.cleanup()
 		t.Skip("could not find a service routed to node-a")
 	}
 
+	// Stop replica before writing so it misses the entries.
 	nodeB.cleanup()
 
 	clientA := nodeA.ingestClient(t)
@@ -62,6 +62,7 @@ func TestPhase5_CatchUp_ReplicaFetchesMissedEntries(t *testing.T) {
 		}
 	}
 
+	// Simulate node-b restart with fresh storage.
 	dir2 := t.TempDir()
 	m2, err := storage.NewManager(dir2, 64*1024*1024)
 	if err != nil {
@@ -89,40 +90,20 @@ func TestPhase5_CatchUp_ReplicaFetchesMissedEntries(t *testing.T) {
 		t.Fatalf("Register restart: %v", err)
 	}
 
-	shardID := ingest.ShardID(svcForNodeA, totalShards)
-	conn, err := grpc.NewClient(nodeA.addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Exercise the real CatchUp path (same code used in main.go startup).
+	catchUpState, err := clusterClient2.GetClusterState(context.Background())
 	if err != nil {
-		t.Fatalf("dial primary: %v", err)
+		t.Fatalf("GetClusterState for catch-up: %v", err)
 	}
-	defer conn.Close()
-
-	fetchCtx, fetchCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	resp, err := logengine.NewIngestServiceClient(conn).FetchShardEntries(fetchCtx, &logengine.FetchShardEntriesRequest{
-		ShardId:     int32(shardID),
-		SinceUnixNs: 0,
-	})
-	fetchCancel()
-	if err != nil {
-		t.Fatalf("FetchShardEntries: %v", err)
+	appended := ingest.CatchUp(context.Background(), "node-b", totalShards, catchUpState, m2, idx2)
+	if appended != 3 {
+		t.Errorf("CatchUp: expected 3 entries appended, got %d", appended)
 	}
-	if len(resp.Entries) != 3 {
-		t.Errorf("expected 3 entries from catch-up, got %d", len(resp.Entries))
-	}
-
-	for _, pb := range resp.Entries {
-		e := ingest.ProtoToEntry(pb)
-		segPath, err := m2.AppendWithPath(e)
-		if err != nil {
-			t.Fatalf("catch-up append: %v", err)
-		}
-		idx2.Add(e, segPath)
-	}
-
-	total := entryCountOnNode(t, m2)
-	if total != 3 {
+	if total := entryCountOnNode(t, m2); total != 3 {
 		t.Errorf("after catch-up: expected 3 entries on replica, got %d", total)
 	}
 
+	// Bring replica back up and verify it can receive ReplicateEntry calls.
 	repl2 := replication.NewReplicator(totalShards)
 	defer repl2.Stop()
 	ctx2, cancel2 := context.WithCancel(context.Background())
@@ -145,6 +126,7 @@ func TestPhase5_CatchUp_ReplicaFetchesMissedEntries(t *testing.T) {
 	}
 	defer replicaConn.Close()
 
+	shardID := ingest.ShardID(svcForNodeA, totalShards)
 	_, err = logengine.NewIngestServiceClient(replicaConn).ReplicateEntry(context.Background(), &logengine.ReplicateEntryRequest{
 		Entry:   &logengine.LogEntry{Id: "post-catchup", Service: svcForNodeA, Message: "post-restart", Level: "INFO"},
 		ShardId: int32(shardID),
