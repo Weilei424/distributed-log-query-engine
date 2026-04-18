@@ -117,6 +117,7 @@ func (s *Server) GetClusterState(_ context.Context, _ *logengine.GetClusterState
 		shards = append(shards, &logengine.ShardInfo{
 			ShardId:     int32(sr.ShardID),
 			PrimaryNode: sr.PrimaryNode,
+			ReplicaNode: sr.ReplicaNode,
 		})
 	}
 
