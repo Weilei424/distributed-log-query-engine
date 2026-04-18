@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
+	"github.com/Weilei424/distributed-log-query-engine/internal/metadata"
 )
 
 // ClusterClient connects a storage node to the coordinator cluster.
@@ -129,6 +130,42 @@ func (c *ClusterClient) SendHeartbeat(ctx context.Context) error {
 		}
 	}
 	return fmt.Errorf("heartbeat failed after retries: no reachable leader")
+}
+
+// GetClusterState fetches the current cluster state from the coordinator.
+// Any coordinator can serve this request (no leader routing needed).
+func (c *ClusterClient) GetClusterState(ctx context.Context) (metadata.ClusterState, error) {
+	resp, err := c.client.GetClusterState(ctx, &logengine.GetClusterStateRequest{})
+	if err != nil {
+		return metadata.ClusterState{}, err
+	}
+	return protoToClusterState(resp), nil
+}
+
+// protoToClusterState converts the proto GetClusterStateResponse to internal ClusterState.
+func protoToClusterState(resp *logengine.GetClusterStateResponse) metadata.ClusterState {
+	nodes := make(map[string]metadata.NodeRecord, len(resp.Nodes))
+	for _, n := range resp.Nodes {
+		shards := make([]int, len(n.Shards))
+		for i, s := range n.Shards {
+			shards[i] = int(s)
+		}
+		nodes[n.Id] = metadata.NodeRecord{
+			ID:      n.Id,
+			Address: n.Address,
+			Status:  metadata.NodeStatus(n.Status),
+			Shards:  shards,
+		}
+	}
+	shards := make(map[int]metadata.ShardRecord, len(resp.Shards))
+	for _, s := range resp.Shards {
+		shards[int(s.ShardId)] = metadata.ShardRecord{
+			ShardID:     int(s.ShardId),
+			PrimaryNode: s.PrimaryNode,
+			ReplicaNode: s.ReplicaNode,
+		}
+	}
+	return metadata.ClusterState{Nodes: nodes, Shards: shards}
 }
 
 // Close closes the underlying gRPC connection.
