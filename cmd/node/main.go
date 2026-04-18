@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
 	"github.com/Weilei424/distributed-log-query-engine/internal/cluster"
@@ -64,28 +63,10 @@ func main() {
 			shards, err := clusterClient.Register(regCtx, advertisedAddr)
 			regCancel()
 			if err != nil {
-				log.Printf("cluster register: %v (starting in degraded mode; will retry)", err)
-				// Retry in background.
-				go func() {
-					for {
-						select {
-						case <-ctx.Done():
-							return
-						case <-time.After(heartbeatInterval):
-						}
-						regCtx, regCancel := context.WithTimeout(ctx, 30*time.Second)
-						shards, err := clusterClient.Register(regCtx, advertisedAddr)
-						regCancel()
-						if err != nil {
-							log.Printf("cluster register retry: %v", err)
-							continue
-						}
-						fmt.Printf("registered with coordinator (retry): shards=%v\n", shards)
-						sender := cluster.NewHeartbeatSender(clusterClient, heartbeatInterval)
-						sender.Run(ctx)
-						return
-					}
-				}()
+				// Registration failed — start in local-only mode with no cluster membership.
+				// The node will NOT heartbeat and will NOT appear healthy in cluster metadata.
+				// Restart the node once the coordinator is reachable to enable distributed mode.
+				log.Printf("cluster register: %v (starting in local-only mode; restart required to join cluster)", err)
 				ingestSrv = ingest.NewLocalServer(manager, idx)
 			} else {
 				fmt.Printf("registered with coordinator: shards=%v\n", shards)
@@ -96,7 +77,11 @@ func main() {
 				go stateCache.Run(ctx)
 
 				// Run catch-up for shards this node owns as replica.
-				runCatchUp(ctx, nodeID, totalShards, clusterClient, stateCache, manager, idx)
+				if catchUpState, err := clusterClient.GetClusterState(ctx); err != nil {
+					log.Printf("catch-up: get cluster state failed: %v (skipping)", err)
+				} else {
+					ingest.CatchUp(ctx, nodeID, totalShards, catchUpState, manager, idx)
+				}
 
 				// Build orchestrator.
 				repl := replication.NewReplicator(totalShards)
@@ -143,82 +128,6 @@ func main() {
 		log.Printf("manager close: %v", err)
 	}
 	fmt.Println("node stopped")
-}
-
-// runCatchUp fetches entries from the primary for each shard this node replicates.
-// Runs synchronously before the server starts accepting traffic.
-// Skips silently if the primary is unreachable.
-func runCatchUp(ctx context.Context, nodeID string, totalShards int, clusterClient *cluster.ClusterClient, stateReader *cluster.StateCache, manager *storage.Manager, idx *index.Index) {
-	state, err := clusterClient.GetClusterState(ctx)
-	if err != nil {
-		log.Printf("catch-up: get cluster state failed: %v (skipping)", err)
-		return
-	}
-
-	for shardID, sr := range state.Shards {
-		if sr.ReplicaNode != nodeID {
-			continue
-		}
-		primaryAddr := ""
-		if n, ok := state.Nodes[sr.PrimaryNode]; ok {
-			primaryAddr = n.Address
-		}
-		if primaryAddr == "" {
-			log.Printf("catch-up: shard %d primary address unknown, skipping", shardID)
-			continue
-		}
-
-		sinceNs := latestReceivedAtForShard(shardID, totalShards, manager)
-
-		conn, err := grpc.NewClient(primaryAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			log.Printf("catch-up: dial primary %s for shard %d: %v (skipping)", primaryAddr, shardID, err)
-			continue
-		}
-
-		fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		resp, err := logengine.NewIngestServiceClient(conn).FetchShardEntries(fetchCtx, &logengine.FetchShardEntriesRequest{
-			ShardId:     int32(shardID),
-			SinceUnixNs: sinceNs,
-		})
-		cancel()
-		conn.Close()
-
-		if err != nil {
-			log.Printf("catch-up: FetchShardEntries shard %d from %s: %v (skipping)", shardID, primaryAddr, err)
-			continue
-		}
-
-		for _, pb := range resp.Entries {
-			e := ingest.ProtoToEntry(pb)
-			segPath, err := manager.AppendWithPath(e)
-			if err != nil {
-				log.Printf("catch-up: append entry %s: %v", e.ID, err)
-				continue
-			}
-			idx.Add(e, segPath)
-		}
-		log.Printf("catch-up: shard %d caught up %d entries from %s", shardID, len(resp.Entries), primaryAddr)
-	}
-}
-
-// latestReceivedAtForShard returns the largest received_at nanosecond timestamp
-// among all local entries that belong to the given shard. Returns 0 if none.
-func latestReceivedAtForShard(shardID, totalShards int, manager *storage.Manager) int64 {
-	entries, err := manager.ReadSegments(manager.SegmentPaths())
-	if err != nil {
-		return 0
-	}
-	var latest int64
-	for _, e := range entries {
-		if totalShards > 0 && ingest.ShardID(e.Service, totalShards) != shardID {
-			continue
-		}
-		if e.ReceivedAt > latest {
-			latest = e.ReceivedAt
-		}
-	}
-	return latest
 }
 
 func envOrDefault(key, def string) string {
