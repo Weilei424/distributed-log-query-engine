@@ -1,11 +1,9 @@
+// internal/ingest/server.go
 package ingest
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
-	"time"
+	"sort"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -13,52 +11,52 @@ import (
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
 	"github.com/Weilei424/distributed-log-query-engine/internal/index"
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
-	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
 )
 
 // Server implements the gRPC IngestServiceServer interface.
+// Client-facing RPCs (Ingest, IngestBatch) delegate to the Orchestrator.
+// Internal RPCs (ReplicateEntry, FetchShardEntries) bypass routing and
+// operate directly on local storage.
 type Server struct {
 	logengine.UnimplementedIngestServiceServer
-	manager *storage.Manager
-	idx     *index.Index
+	orchestrator *Orchestrator
+	nodeID       string
+	totalShards  int
+	manager      *storage.Manager
+	idx          *index.Index
 }
 
-// NewServer creates a new ingest Server backed by the given storage manager and index.
-func NewServer(manager *storage.Manager, idx *index.Index) *Server {
-	return &Server{manager: manager, idx: idx}
+// NewServer creates a Server backed by the given orchestrator.
+// Use for cluster-aware nodes.
+func NewServer(orchestrator *Orchestrator, nodeID string, totalShards int, manager *storage.Manager, idx *index.Index) *Server {
+	return &Server{
+		orchestrator: orchestrator,
+		nodeID:       nodeID,
+		totalShards:  totalShards,
+		manager:      manager,
+		idx:          idx,
+	}
 }
 
-// Ingest writes a single log entry to the storage layer and updates the index.
+// NewLocalServer creates a Server for single-node use without cluster routing.
+// All writes go directly to local storage. Used by tests and no-coordinator mode.
+func NewLocalServer(manager *storage.Manager, idx *index.Index) *Server {
+	orch := newLocalOrchestrator(manager, idx)
+	return &Server{
+		orchestrator: orch,
+		nodeID:       "local",
+		totalShards:  0,
+		manager:      manager,
+		idx:          idx,
+	}
+}
+
+// Ingest delegates to the orchestrator for routing and local write.
 func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*logengine.IngestResponse, error) {
-	if req.Entry == nil {
-		return nil, status.Error(codes.InvalidArgument, "entry is required")
-	}
-	if req.Entry.Service == "" {
-		return nil, status.Error(codes.InvalidArgument, "entry.service is required")
-	}
-	if req.Entry.Message == "" {
-		return nil, status.Error(codes.InvalidArgument, "entry.message is required")
-	}
-
-	entry := protoToEntry(req.Entry)
-	entry.ReceivedAt = time.Now().UnixNano()
-	if entry.ID == "" {
-		entry.ID = generateID()
-	}
-
-	// TODO: propagate ctx to manager.AppendWithPath when storage layer supports cancellation.
-	segPath, err := s.manager.AppendWithPath(entry)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "append failed: %v", err)
-	}
-
-	s.idx.Add(entry, segPath)
-
-	return &logengine.IngestResponse{Id: entry.ID, Ok: true}, nil
+	return s.orchestrator.HandleIngest(ctx, req)
 }
 
-// IngestBatch writes multiple log entries to the storage layer.
-// Does not short-circuit on individual entry failure.
+// IngestBatch writes multiple log entries via the orchestrator.
 func (s *Server) IngestBatch(ctx context.Context, req *logengine.IngestBatchRequest) (*logengine.IngestBatchResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
@@ -79,27 +77,52 @@ func (s *Server) IngestBatch(ctx context.Context, req *logengine.IngestBatchRequ
 	return &logengine.IngestBatchResponse{Accepted: accepted, Rejected: rejected}, nil
 }
 
-// protoToEntry converts a proto LogEntry to the internal types.LogEntry.
-// Keeps internal/storage free of direct proto API dependencies.
-func protoToEntry(pb *logengine.LogEntry) *types.LogEntry {
-	return &types.LogEntry{
-		ID:         pb.Id,
-		Timestamp:  pb.Timestamp,
-		ReceivedAt: pb.ReceivedAt,
-		Service:    pb.Service,
-		Level:      pb.Level,
-		Message:    pb.Message,
-		Fields:     pb.Fields,
+// ReplicateEntry writes an entry directly to local storage, bypassing routing.
+// Called by the primary's Replicator to deliver an async copy to this replica.
+func (s *Server) ReplicateEntry(ctx context.Context, req *logengine.ReplicateEntryRequest) (*logengine.ReplicateEntryResponse, error) {
+	if req.Entry == nil {
+		return nil, status.Error(codes.InvalidArgument, "entry is required")
 	}
+	// Defensive check: the computed shard must match the claimed shard_id.
+	if s.totalShards > 0 {
+		computed := ShardID(req.Entry.Service, s.totalShards)
+		if computed != int(req.ShardId) {
+			return nil, status.Errorf(codes.FailedPrecondition,
+				"shard mismatch: computed %d for service %q, request claims %d",
+				computed, req.Entry.Service, req.ShardId)
+		}
+	}
+	entry := ProtoToEntry(req.Entry)
+	segPath, err := s.manager.AppendWithPath(entry)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "replicate append failed: %v", err)
+	}
+	s.idx.Add(entry, segPath)
+	return &logengine.ReplicateEntryResponse{Ok: true}, nil
 }
 
-// generateID returns a random ID for entries that omit one on ingest.
-// Format: "auto-<16 hex chars>", unique with overwhelming probability.
-func generateID() string {
-	b := make([]byte, 8)
-	if _, err := rand.Read(b); err != nil {
-		// crypto/rand failure is extremely unlikely; fall back to timestamp.
-		return fmt.Sprintf("auto-%d", time.Now().UnixNano())
+// FetchShardEntries returns entries for a shard with received_at > since_unix_ns.
+// Called by a replica node during catch-up on restart.
+func (s *Server) FetchShardEntries(ctx context.Context, req *logengine.FetchShardEntriesRequest) (*logengine.FetchShardEntriesResponse, error) {
+	all, err := s.manager.ReadSegments(s.manager.SegmentPaths())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "read segments: %v", err)
 	}
-	return "auto-" + hex.EncodeToString(b)
+
+	var result []*logengine.LogEntry
+	for _, e := range all {
+		if s.totalShards > 0 && ShardID(e.Service, s.totalShards) != int(req.ShardId) {
+			continue
+		}
+		if e.ReceivedAt <= req.SinceUnixNs {
+			continue
+		}
+		result = append(result, EntryToProto(e))
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ReceivedAt < result[j].ReceivedAt
+	})
+
+	return &logengine.FetchShardEntriesResponse{Entries: result}, nil
 }
