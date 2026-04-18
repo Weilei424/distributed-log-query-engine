@@ -54,14 +54,55 @@ func TestFSM_RegisterNode_NewNode(t *testing.T) {
 	}
 }
 
-func TestFSM_RegisterNode_SecondNodeGetsNoShards(t *testing.T) {
+func TestFSM_RegisterNode_TwoNodesShareShards(t *testing.T) {
 	fsm := metadata.NewFSM(4)
 	applyCmd(t, fsm, metadata.CmdRegisterNode, metadata.RegisterNodePayload{NodeID: "node-1", Address: ":50051", NowUnixNs: 1000})
 	applyCmd(t, fsm, metadata.CmdRegisterNode, metadata.RegisterNodePayload{NodeID: "node-2", Address: ":50052", NowUnixNs: 1000})
 
 	state := fsm.State()
-	if n := len(state.Nodes["node-2"].Shards); n != 0 {
-		t.Errorf("node-2 expected 0 shards (greedy assignment), got %d", n)
+	n1 := len(state.Nodes["node-1"].Shards)
+	n2 := len(state.Nodes["node-2"].Shards)
+	if n1 != 2 {
+		t.Errorf("node-1 expected 2 shards (round-robin, 4 total / 2 nodes), got %d", n1)
+	}
+	if n2 != 2 {
+		t.Errorf("node-2 expected 2 shards (round-robin, 4 total / 2 nodes), got %d", n2)
+	}
+	// Every shard must have a primary.
+	for shardID, sr := range state.Shards {
+		if sr.PrimaryNode == "" {
+			t.Errorf("shard %d has no primary after two-node registration", shardID)
+		}
+	}
+}
+
+func TestFSM_RegisterNode_SecondNodeAssignedAsReplica(t *testing.T) {
+	fsm := metadata.NewFSM(4)
+	applyCmd(t, fsm, metadata.CmdRegisterNode, metadata.RegisterNodePayload{NodeID: "node-1", Address: ":50051", NowUnixNs: 1000})
+	applyCmd(t, fsm, metadata.CmdRegisterNode, metadata.RegisterNodePayload{NodeID: "node-2", Address: ":50052", NowUnixNs: 1000})
+
+	state := fsm.State()
+	for shardID, sr := range state.Shards {
+		if sr.ReplicaNode == "" {
+			t.Errorf("shard %d has no replica after two-node registration", shardID)
+		}
+		if sr.ReplicaNode == sr.PrimaryNode {
+			t.Errorf("shard %d: replica %q equals primary %q", shardID, sr.ReplicaNode, sr.PrimaryNode)
+		}
+	}
+}
+
+func TestFSM_MarkUnhealthy_ClearsReplicaSlot(t *testing.T) {
+	fsm := metadata.NewFSM(4)
+	applyCmd(t, fsm, metadata.CmdRegisterNode, metadata.RegisterNodePayload{NodeID: "node-1", Address: ":50051", NowUnixNs: 1000})
+	applyCmd(t, fsm, metadata.CmdRegisterNode, metadata.RegisterNodePayload{NodeID: "node-2", Address: ":50052", NowUnixNs: 1000})
+	applyCmd(t, fsm, metadata.CmdMarkUnhealthy, metadata.MarkUnhealthyPayload{NodeID: "node-2"})
+
+	state := fsm.State()
+	for shardID, sr := range state.Shards {
+		if sr.ReplicaNode == "node-2" {
+			t.Errorf("shard %d still has node-2 as replica after mark-unhealthy", shardID)
+		}
 	}
 }
 
@@ -101,6 +142,27 @@ func TestFSM_MarkUnhealthy_ClearsShards(t *testing.T) {
 		if sr.PrimaryNode != "" {
 			t.Errorf("shard %d: expected empty primary after MarkUnhealthy, got %q", shardID, sr.PrimaryNode)
 		}
+	}
+}
+
+func TestFSM_MarkUnhealthy_SurvivingNodeClaimsPrimaryShards(t *testing.T) {
+	fsm := metadata.NewFSM(4)
+	applyCmd(t, fsm, metadata.CmdRegisterNode, metadata.RegisterNodePayload{NodeID: "node-1", Address: ":50051", NowUnixNs: 1000})
+	applyCmd(t, fsm, metadata.CmdRegisterNode, metadata.RegisterNodePayload{NodeID: "node-2", Address: ":50052", NowUnixNs: 1000})
+	applyCmd(t, fsm, metadata.CmdMarkUnhealthy, metadata.MarkUnhealthyPayload{NodeID: "node-1"})
+
+	state := fsm.State()
+	for shardID, sr := range state.Shards {
+		if sr.PrimaryNode == "" {
+			t.Errorf("shard %d has no primary after node-1 marked unhealthy", shardID)
+		}
+		if sr.PrimaryNode == "node-1" {
+			t.Errorf("shard %d still assigned to unhealthy node-1", shardID)
+		}
+	}
+	// node-2 should own all 4 shards now
+	if n := len(state.Nodes["node-2"].Shards); n != 4 {
+		t.Errorf("node-2 expected 4 shards after node-1 failure, got %d", n)
 	}
 }
 
