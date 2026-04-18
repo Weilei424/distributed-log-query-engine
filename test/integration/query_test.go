@@ -21,7 +21,7 @@ func TestQuerySingleNode_Filters(t *testing.T) {
 	t.Cleanup(func() { m.Close() })
 
 	idx := index.NewIndex()
-	srv := ingest.NewServer(m, idx)
+	srv := ingest.NewLocalServer(m, idx)
 	ex := query.NewLocalExecutor(idx, m)
 	ctx := context.Background()
 
@@ -92,7 +92,7 @@ func TestQuerySingleNode_IndexRebuildAfterRestart(t *testing.T) {
 		t.Fatalf("NewManager: %v", err)
 	}
 	idx := index.NewIndex()
-	srv := ingest.NewServer(m, idx)
+	srv := ingest.NewLocalServer(m, idx)
 
 	entries := []*logengine.LogEntry{
 		{Id: "1", Service: "auth", Level: "INFO", Message: "token expired", Timestamp: 100},
