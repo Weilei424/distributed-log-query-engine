@@ -13,6 +13,14 @@ service IngestService {
 
   // IngestBatch writes multiple log entries in a single request.
   rpc IngestBatch(IngestBatchRequest) returns (IngestBatchResponse);
+
+  // ReplicateEntry is called by the primary to deliver an async replica copy.
+  // The receiving node writes directly to local storage — no further routing.
+  rpc ReplicateEntry(ReplicateEntryRequest) returns (ReplicateEntryResponse);
+
+  // FetchShardEntries returns entries for a shard after a given received_at timestamp.
+  // Called by a replica node during catch-up after restart.
+  rpc FetchShardEntries(FetchShardEntriesRequest) returns (FetchShardEntriesResponse);
 }
 
 message IngestRequest {
@@ -37,4 +45,22 @@ message IngestBatchResponse {
 
   // Number of entries rejected due to validation or write failure.
   int32 rejected = 2;
+}
+
+message ReplicateEntryRequest {
+  LogEntry entry    = 1;
+  int32    shard_id = 2;
+}
+
+message ReplicateEntryResponse {
+  bool ok = 1;
+}
+
+message FetchShardEntriesRequest {
+  int32 shard_id      = 1;
+  int64 since_unix_ns = 2;
+}
+
+message FetchShardEntriesResponse {
+  repeated LogEntry entries = 1;
 }
