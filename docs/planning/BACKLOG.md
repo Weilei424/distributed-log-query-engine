@@ -130,38 +130,38 @@
 **Plan:** `docs/superpowers/plans/2026-04-17-phase5-distributed-ingest-replication.md`
 **Spec:** `docs/superpowers/specs/2026-04-17-phase5-distributed-ingest-replication-design.md`
 
-### Status: Not started
+### Status: Complete
 
-- [ ] `internal/metadata/state.go` — add `ReplicaNode string` to `ShardRecord`
-- [ ] `internal/metadata/fsm.go` — replace greedy assignment with `rebalancePrimary()` + `assignReplicas()`; clear replica slots in `applyMarkUnhealthy`
-- [ ] `internal/metadata/server.go` — include `ReplicaNode` in `GetClusterState` response
-- [ ] `proto/logengine/v1/cluster.proto` — add `replica_node` field to `ShardInfo`
-- [ ] `proto/logengine/v1/ingest.proto` — add `ReplicateEntry` and `FetchShardEntries` RPCs + messages
-- [ ] `buf generate` — regenerate Go bindings
-- [ ] `internal/ingest/router.go` — `ShardID(service, totalShards) int` using FNV-1a hash
-- [ ] `internal/ingest/convert.go` — exported `ProtoToEntry`, `EntryToProto`, `GenerateID`
-- [ ] `internal/ingest/orchestrator.go` — `IngestionOrchestrator`: routes, forwards, triggers async replication
-- [ ] `internal/ingest/server.go` — thin adapter; `ReplicateEntry` and `FetchShardEntries` handlers; `NewLocalServer` for single-node use
-- [ ] `internal/cluster/client.go` — add `GetClusterState` method and `protoToClusterState` helper
-- [ ] `internal/cluster/state_cache.go` — `ClusterStateReader` interface + `StateCache` polling implementation
-- [ ] `internal/replication/replicator.go` — async replication worker with per-replica buffered channel
-- [ ] `cmd/node/main.go` — wire state cache, replicator, orchestrator; `runCatchUp` before serving; `TOTAL_SHARDS` env var
-- [ ] Unit tests: `router_test.go` (determinism, range, distribution, empty)
-- [ ] Unit tests: `replicator_test.go` (delivery, non-blocking, clean stop)
-- [ ] Unit tests: `fsm_test.go` extended (two-node share, replica assignment, mark-unhealthy clears replica)
-- [ ] Integration test: routing forwards write to correct primary node
-- [ ] Integration test: async replication delivers copy to replica node
-- [ ] Integration test: primary failure leaves data available on replica
-- [ ] Integration test: restarted replica fetches missed entries via `FetchShardEntries`
-- [ ] Documented consistency tradeoff: async replication durability gap
-- [ ] `make test` passes
-- [ ] `make lint` passes
-- [ ] `make build` passes
+- [x] `internal/metadata/state.go` — add `ReplicaNode string` to `ShardRecord`
+- [x] `internal/metadata/fsm.go` — replace greedy assignment with `rebalancePrimary()` + `assignReplicas()`; clear replica slots in `applyMarkUnhealthy`; `rebalancePrimary()` called in `applyMarkUnhealthy` so surviving nodes claim orphaned shards
+- [x] `internal/metadata/server.go` — include `ReplicaNode` in `GetClusterState` response
+- [x] `proto/logengine/v1/cluster.proto` — add `replica_node` field to `ShardInfo`
+- [x] `proto/logengine/v1/ingest.proto` — add `ReplicateEntry` and `FetchShardEntries` RPCs
+- [x] `buf generate` — regenerated Go bindings
+- [x] `internal/ingest/router.go` — `ShardID(service, totalShards) int` using FNV-1a hash
+- [x] `internal/ingest/convert.go` — exported `ProtoToEntry`, `EntryToProto`, `GenerateID`
+- [x] `internal/ingest/orchestrator.go` — `IngestionOrchestrator`: routes, forwards, triggers async replication
+- [x] `internal/ingest/server.go` — thin adapter; `ReplicateEntry` and `FetchShardEntries` handlers; `NewLocalServer` for single-node use
+- [x] `internal/cluster/client.go` — add `GetClusterState` method and `protoToClusterState` helper
+- [x] `internal/cluster/state_cache.go` — `ClusterStateReader` interface + `StateCache` polling implementation
+- [x] `internal/replication/replicator.go` — async replication worker with per-replica buffered channel
+- [x] `cmd/node/main.go` — wire state cache, replicator, orchestrator; `runCatchUp` before serving; `TOTAL_SHARDS` env var
+- [x] Unit tests: `router_test.go` (determinism, range, distribution, empty)
+- [x] Unit tests: `replicator_test.go` (delivery, non-blocking, clean stop)
+- [x] Unit tests: `fsm_test.go` extended (two-node share, replica assignment, mark-unhealthy clears replica, surviving node claims primary shards)
+- [x] Integration test: routing forwards write to correct primary node
+- [x] Integration test: async replication delivers copy to replica node
+- [x] Integration test: primary failure leaves data available on replica
+- [x] Integration test: restarted replica fetches missed entries via `FetchShardEntries`
+- [x] `make test` passes
+- [x] `make lint` passes
+- [x] `make build` passes
 
 ---
 
 ## Phase 6 — Distributed Query Fan-Out and Result Aggregation
 
+- [ ] Shard ownership reassignment (Phase 5 rebalancePrimary) does not migrate physical data; distributed queries must fan-out to all nodes and merge to compensate until data migration is implemented
 - [ ] `internal/coordinator` package: fan-out query orchestration
 - [ ] Coordinator resolves relevant shards and target nodes from metadata
 - [ ] Parallel query dispatch to storage nodes
@@ -209,7 +209,7 @@
 - [ ] README polished for public portfolio use
 - [ ] Resume bullets drafted based on measurable project outcomes
 - [ ] At least one advanced feature benchmarked with before/after numbers
-- [ ] Segment file transfer catch-up: transfer full closed segment files from primary to replica on restart, replacing entry-by-entry `FetchShardEntries` for nodes down for extended periods
+- [ ] Segment file transfer catch-up (Option C): transfer full closed segment files from primary to replica on restart, replacing entry-by-entry fetch for nodes down for extended periods
 
 ---
 
