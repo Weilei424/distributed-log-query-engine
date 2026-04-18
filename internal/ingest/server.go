@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
+	"github.com/Weilei424/distributed-log-query-engine/internal/cluster"
 	"github.com/Weilei424/distributed-log-query-engine/internal/index"
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
 )
@@ -22,6 +23,7 @@ type Server struct {
 	orchestrator *Orchestrator
 	nodeID       string
 	totalShards  int
+	stateReader  cluster.ClusterStateReader // nil in local mode
 	manager      *storage.Manager
 	idx          *index.Index
 }
@@ -33,6 +35,7 @@ func NewServer(orchestrator *Orchestrator, nodeID string, totalShards int, manag
 		orchestrator: orchestrator,
 		nodeID:       nodeID,
 		totalShards:  totalShards,
+		stateReader:  orchestrator.StateReader(),
 		manager:      manager,
 		idx:          idx,
 	}
@@ -83,15 +86,24 @@ func (s *Server) ReplicateEntry(ctx context.Context, req *logengine.ReplicateEnt
 	if req.Entry == nil {
 		return nil, status.Error(codes.InvalidArgument, "entry is required")
 	}
-	// Defensive check: the computed shard must match the claimed shard_id.
-	// TODO(phase6): also verify s.nodeID == replica for req.ShardId via state cache
-	// to prevent stale routing from poisoning local state.
 	if s.totalShards > 0 {
+		// Verify the entry actually belongs to the claimed shard.
 		computed := ShardID(req.Entry.Service, s.totalShards)
 		if computed != int(req.ShardId) {
 			return nil, status.Errorf(codes.FailedPrecondition,
 				"shard mismatch: computed %d for service %q, request claims %d",
 				computed, req.Entry.Service, req.ShardId)
+		}
+		// Verify this node is the designated replica for the shard.
+		// Allow writes when the shard is unassigned (state cache may be temporarily stale
+		// during rebalancing), but reject when it is explicitly assigned elsewhere.
+		if s.stateReader != nil {
+			_, replica := s.stateReader.ShardOwners(int(req.ShardId))
+			if replica != "" && replica != s.nodeID {
+				return nil, status.Errorf(codes.FailedPrecondition,
+					"node %s is not the replica for shard %d (replica is %s)",
+					s.nodeID, req.ShardId, replica)
+			}
 		}
 	}
 	entry := ProtoToEntry(req.Entry)
@@ -103,8 +115,10 @@ func (s *Server) ReplicateEntry(ctx context.Context, req *logengine.ReplicateEnt
 	return &logengine.ReplicateEntryResponse{Ok: true}, nil
 }
 
-// FetchShardEntries returns entries for a shard with received_at > since_unix_ns.
-// Called by a replica node during catch-up on restart.
+// FetchShardEntries returns entries for a shard with received_at >= since_unix_ns.
+// Called by a replica node during catch-up on restart. CatchUp deduplicates by ID,
+// so returning entries at the boundary is safe and prevents missed entries when
+// multiple records share the same timestamp.
 func (s *Server) FetchShardEntries(ctx context.Context, req *logengine.FetchShardEntriesRequest) (*logengine.FetchShardEntriesResponse, error) {
 	all, err := s.manager.ReadSegments(s.manager.SegmentPaths())
 	if err != nil {
@@ -116,7 +130,7 @@ func (s *Server) FetchShardEntries(ctx context.Context, req *logengine.FetchShar
 		if s.totalShards > 0 && ShardID(e.Service, s.totalShards) != int(req.ShardId) {
 			continue
 		}
-		if e.ReceivedAt <= req.SinceUnixNs {
+		if e.ReceivedAt < req.SinceUnixNs {
 			continue
 		}
 		result = append(result, EntryToProto(e))
