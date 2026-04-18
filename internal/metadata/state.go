@@ -21,6 +21,7 @@ type NodeRecord struct {
 type ShardRecord struct {
 	ShardID     int
 	PrimaryNode string // node ID; empty if unowned
+	ReplicaNode string // node ID; empty if no replica assigned
 }
 
 // ClusterState is the full in-memory state managed by the Raft FSM.
