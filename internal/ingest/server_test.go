@@ -23,7 +23,7 @@ func newTestServer(t *testing.T) *ingest.Server {
 		t.Fatalf("NewManager: %v", err)
 	}
 	t.Cleanup(func() { m.Close() })
-	return ingest.NewServer(m, index.NewIndex())
+	return ingest.NewLocalServer(m, index.NewIndex())
 }
 
 func TestIngest_Success(t *testing.T) {
@@ -93,7 +93,7 @@ func TestIngest_ReceivedAtIsSet(t *testing.T) {
 		t.Fatalf("NewManager: %v", err)
 	}
 	t.Cleanup(func() { m.Close() })
-	srv := ingest.NewServer(m, index.NewIndex())
+	srv := ingest.NewLocalServer(m, index.NewIndex())
 
 	before := time.Now().UnixNano()
 	resp, err := srv.Ingest(context.Background(), &logengine.IngestRequest{
