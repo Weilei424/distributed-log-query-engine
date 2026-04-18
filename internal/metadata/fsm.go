@@ -102,33 +102,24 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 func (f *FSM) applyRegisterNode(p RegisterNodePayload) error {
 	existing, ok := f.state.Nodes[p.NodeID]
 	if ok && existing.Status == NodeHealthy {
-		// Already healthy: just refresh address and last seen.
+		// Already healthy: refresh address and last seen, no shard change.
 		existing.Address = p.Address
 		existing.LastSeen = p.NowUnixNs
 		f.state.Nodes[p.NodeID] = existing
 		return nil
 	}
 
-	// New node or rejoining after being marked unhealthy: claim all unowned shards.
-	var unowned []int
-	for id, sr := range f.state.Shards {
-		if sr.PrimaryNode == "" {
-			unowned = append(unowned, id)
-		}
-	}
-	sort.Ints(unowned) // deterministic shard assignment order
-	for _, shardID := range unowned {
-		sr := f.state.Shards[shardID]
-		sr.PrimaryNode = p.NodeID
-		f.state.Shards[shardID] = sr
-	}
+	// New node or rejoining after being marked unhealthy.
+	// Register with no shards; rebalancePrimary distributes them.
 	f.state.Nodes[p.NodeID] = NodeRecord{
 		ID:       p.NodeID,
 		Address:  p.Address,
-		Shards:   unowned,
 		Status:   NodeHealthy,
 		LastSeen: p.NowUnixNs,
 	}
+
+	f.rebalancePrimary()
+	f.assignReplicas()
 	return nil
 }
 
@@ -147,15 +138,101 @@ func (f *FSM) applyMarkUnhealthy(p MarkUnhealthyPayload) error {
 	if !ok {
 		return fmt.Errorf("node not found: %s", p.NodeID)
 	}
+	// Release primary ownership.
 	for _, shardID := range node.Shards {
 		sr := f.state.Shards[shardID]
 		sr.PrimaryNode = ""
 		f.state.Shards[shardID] = sr
 	}
+	// Clear replica slots where this node was the replica.
+	for id, sr := range f.state.Shards {
+		if sr.ReplicaNode == p.NodeID {
+			sr.ReplicaNode = ""
+			f.state.Shards[id] = sr
+		}
+	}
 	node.Status = NodeUnhealthy
 	node.Shards = nil
 	f.state.Nodes[p.NodeID] = node
+
+	// Redistribute primary ownership among remaining healthy nodes.
+	// Must be called after the node is set to NodeUnhealthy so the dying
+	// node is excluded from the healthy pool during redistribution.
+	f.rebalancePrimary()
+
+	// Reassign replica slots among remaining healthy nodes.
+	f.assignReplicas()
 	return nil
+}
+
+// rebalancePrimary distributes all shards round-robin across healthy nodes.
+// Called whenever a node joins. Does NOT migrate physical data — only metadata.
+func (f *FSM) rebalancePrimary() {
+	var healthyIDs []string
+	for id, n := range f.state.Nodes {
+		if n.Status == NodeHealthy {
+			healthyIDs = append(healthyIDs, id)
+		}
+	}
+	if len(healthyIDs) == 0 {
+		return
+	}
+	sort.Strings(healthyIDs)
+
+	var allShards []int
+	for id := range f.state.Shards {
+		allShards = append(allShards, id)
+	}
+	sort.Ints(allShards)
+
+	// Clear existing primary assignments and node shard lists.
+	for id, sr := range f.state.Shards {
+		sr.PrimaryNode = ""
+		f.state.Shards[id] = sr
+	}
+	for id, n := range f.state.Nodes {
+		n.Shards = nil
+		f.state.Nodes[id] = n
+	}
+
+	// Assign round-robin.
+	for i, shardID := range allShards {
+		nodeID := healthyIDs[i%len(healthyIDs)]
+		sr := f.state.Shards[shardID]
+		sr.PrimaryNode = nodeID
+		f.state.Shards[shardID] = sr
+		n := f.state.Nodes[nodeID]
+		n.Shards = append(n.Shards, shardID)
+		f.state.Nodes[nodeID] = n
+	}
+
+	for id, n := range f.state.Nodes {
+		sort.Ints(n.Shards)
+		f.state.Nodes[id] = n
+	}
+}
+
+// assignReplicas assigns the first healthy non-primary node as the replica for each shard.
+// Clears all existing replica assignments before reassigning.
+func (f *FSM) assignReplicas() {
+	var healthyIDs []string
+	for id, n := range f.state.Nodes {
+		if n.Status == NodeHealthy {
+			healthyIDs = append(healthyIDs, id)
+		}
+	}
+	sort.Strings(healthyIDs)
+
+	for id, sr := range f.state.Shards {
+		sr.ReplicaNode = ""
+		for _, nodeID := range healthyIDs {
+			if nodeID != sr.PrimaryNode {
+				sr.ReplicaNode = nodeID
+				break
+			}
+		}
+		f.state.Shards[id] = sr
+	}
 }
 
 // State returns a deep copy of the current cluster state.
