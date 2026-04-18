@@ -84,6 +84,8 @@ func (s *Server) ReplicateEntry(ctx context.Context, req *logengine.ReplicateEnt
 		return nil, status.Error(codes.InvalidArgument, "entry is required")
 	}
 	// Defensive check: the computed shard must match the claimed shard_id.
+	// TODO(phase6): also verify s.nodeID == replica for req.ShardId via state cache
+	// to prevent stale routing from poisoning local state.
 	if s.totalShards > 0 {
 		computed := ShardID(req.Entry.Service, s.totalShards)
 		if computed != int(req.ShardId) {
