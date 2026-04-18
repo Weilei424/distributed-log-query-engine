@@ -53,6 +53,12 @@ func NewOrchestrator(
 	}
 }
 
+// StateReader returns the ClusterStateReader used by this orchestrator.
+// Returns nil for local-mode orchestrators.
+func (o *Orchestrator) StateReader() cluster.ClusterStateReader {
+	return o.stateReader
+}
+
 // newLocalOrchestrator creates an Orchestrator that always writes locally (no routing).
 // Used when the node runs without a coordinator.
 func newLocalOrchestrator(manager *storage.Manager, idx *index.Index) *Orchestrator {
