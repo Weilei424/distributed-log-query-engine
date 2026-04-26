@@ -14,6 +14,7 @@ import (
 	"github.com/Weilei424/distributed-log-query-engine/internal/cluster"
 	"github.com/Weilei424/distributed-log-query-engine/internal/index"
 	"github.com/Weilei424/distributed-log-query-engine/internal/ingest"
+	"github.com/Weilei424/distributed-log-query-engine/internal/query"
 	"github.com/Weilei424/distributed-log-query-engine/internal/replication"
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
 )
@@ -46,6 +47,16 @@ func (tn *testNode) ingestClient(t *testing.T) logengine.IngestServiceClient {
 	}
 	t.Cleanup(func() { conn.Close() })
 	return logengine.NewIngestServiceClient(conn)
+}
+
+func (tn *testNode) queryClient(t *testing.T) logengine.QueryServiceClient {
+	t.Helper()
+	conn, err := grpc.NewClient(tn.addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("dial node %s: %v", tn.nodeID, err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return logengine.NewQueryServiceClient(conn)
 }
 
 func startPhase5Node(t *testing.T, nodeID string, coordAddr string, totalShards int) *testNode {
@@ -92,6 +103,8 @@ func startPhase5Node(t *testing.T, nodeID string, coordAddr string, totalShards 
 
 	grpcSrv := grpc.NewServer()
 	logengine.RegisterIngestServiceServer(grpcSrv, srv)
+	querySrv := query.NewQueryServer(query.NewLocalExecutor(idx, m))
+	logengine.RegisterQueryServiceServer(grpcSrv, querySrv)
 	go grpcSrv.Serve(lis) //nolint:errcheck
 
 	return &testNode{
