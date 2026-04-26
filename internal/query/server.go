@@ -70,7 +70,7 @@ func (s *QueryServer) Query(ctx context.Context, req *logengine.QueryRequest) (*
 	return &logengine.QueryResponse{
 		Entries: pbEntries,
 		Total:   result.Total,
-		Partial: false,
+		Partial: result.Partial,
 		TookMs:  time.Since(start).Milliseconds(),
 	}, nil
 }
