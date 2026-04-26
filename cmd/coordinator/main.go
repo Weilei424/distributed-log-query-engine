@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
+	"github.com/Weilei424/distributed-log-query-engine/internal/coordinator"
 	"github.com/Weilei424/distributed-log-query-engine/internal/metadata"
 )
 
@@ -33,6 +34,8 @@ func main() {
 	totalShards := envIntOrDefault("TOTAL_SHARDS", 16)
 	heartbeatInterval := time.Duration(envIntOrDefault("HEARTBEAT_INTERVAL_SECONDS", 5)) * time.Second
 	heartbeatTimeout := time.Duration(envIntOrDefault("HEARTBEAT_TIMEOUT_SECONDS", 15)) * time.Second
+	nodeQueryTimeoutMs := int64(envIntOrDefault("NODE_QUERY_TIMEOUT_MS", 5000))
+	fanOutLimit := int32(envIntOrDefault("FAN_OUT_LIMIT", 1000))
 
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		log.Fatalf("create data dir: %v", err)
@@ -83,6 +86,8 @@ func main() {
 	// gRPC server
 	grpcSrv := grpc.NewServer()
 	logengine.RegisterClusterServiceServer(grpcSrv, metadata.NewServer(r, fsm))
+	fanOutExec := coordinator.NewFanOutExecutor(fsm, nodeQueryTimeoutMs, fanOutLimit)
+	logengine.RegisterQueryServiceServer(grpcSrv, coordinator.NewFanOutQueryServer(fanOutExec))
 	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		log.Fatalf("grpc listen: %v", err)
@@ -114,8 +119,8 @@ func main() {
 	}()
 	go metadata.StartLivenessChecker(ctx, r, fsm, heartbeatInterval, heartbeatTimeout)
 
-	fmt.Printf("coordinator started: id=%s raft=%s grpc=%s http=%s shards=%d\n",
-		nodeID, bindAddr, grpcAddr, httpAddr, totalShards)
+	fmt.Printf("coordinator started: id=%s raft=%s grpc=%s http=%s shards=%d node_query_timeout_ms=%d fan_out_limit=%d\n",
+		nodeID, bindAddr, grpcAddr, httpAddr, totalShards, nodeQueryTimeoutMs, fanOutLimit)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
