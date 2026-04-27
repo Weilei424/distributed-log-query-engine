@@ -161,20 +161,26 @@
 
 ## Phase 6 — Distributed Query Fan-Out and Result Aggregation
 
-- [ ] Shard ownership reassignment (Phase 5 rebalancePrimary) does not migrate physical data; distributed queries must fan-out to all nodes and merge to compensate until data migration is implemented
-- [ ] `internal/coordinator` package: fan-out query orchestration
-- [ ] Coordinator resolves relevant shards and target nodes from metadata
-- [ ] Parallel query dispatch to storage nodes
-- [ ] Per-node deadline and timeout enforcement
-- [ ] Partial result collection with partial-success flag
-- [ ] Merge, sort, and paginate aggregated results
-- [ ] Response includes result count, latency, and partial-success metadata
-- [ ] Query coordinator debug logs showing: nodes targeted, nodes responded, timeouts, merge duration
-- [ ] Unit tests: merge and sort logic correctness
-- [ ] Unit tests: partial result handling when one node times out
-- [ ] Integration test: end-to-end distributed query returns results from multiple nodes
-- [ ] Integration test: one unavailable node returns partial result with flag set
-- [ ] `make test` passes
+**Plan:** `docs/superpowers/plans/2026-04-26-phase6-distributed-query-fanout.md`
+**Spec:** `docs/superpowers/specs/2026-04-26-phase6-distributed-query-fanout-design.md`
+
+### Status: Complete
+
+- [x] Shard ownership reassignment (Phase 5 rebalancePrimary) does not migrate physical data; distributed queries fan-out to all nodes and merge to compensate
+- [x] `pkg/types/query.go` — add `Partial bool` to `QueryResult`
+- [x] `internal/query/server.go` — forward `result.Partial` in gRPC response
+- [x] `internal/coordinator/merge.go` — `MergeResults`: sort, dedup by ID, paginate; `nodeResult` and `mergeOutput` types
+- [x] `internal/coordinator/node_client.go` — lazy gRPC `QueryServiceClient` pool
+- [x] `internal/coordinator/fanout.go` — `ClusterStateProvider` interface; `FanOutExecutor`: fan-out to all healthy nodes, collect via buffered channel, debug logging
+- [x] `internal/coordinator/query_server.go` — `FanOutQueryServer`: thin gRPC adapter over `FanOutExecutor`
+- [x] `cmd/coordinator/main.go` — wire `FanOutExecutor` and `FanOutQueryServer`; `NODE_QUERY_TIMEOUT_MS` and `FAN_OUT_LIMIT` env vars
+- [x] Unit tests: `TestMergeResults_Sort`, `TestMergeResults_TieBreaker`, `TestMergeResults_Dedup`, `TestMergeResults_Pagination`, `TestMergeResults_Partial`, `TestMergeResults_AllFailed`
+- [x] Unit tests: `TestFanOutExecutor_MergesFromTwoNodes`, `TestFanOutExecutor_SkipsUnhealthyNodes`, `TestFanOutExecutor_PartialOnNodeFailure`
+- [x] Integration test: `TestDistributedQuery_AllNodes` — coordinator returns merged results from both nodes
+- [x] Integration test: `TestDistributedQuery_PartialFailure` — one node down returns partial=true with surviving node's data
+- [x] `test/integration/phase5_node_test.go` — register `QueryService` on test nodes; add `queryClient()` helper
+- [x] `make test` passes
+- [x] `make lint` passes
 
 ---
 
