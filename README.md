@@ -69,9 +69,9 @@ make lint
 | 1 | Foundation — repo scaffold, Go module, proto contracts | Complete |
 | 2 | Single-node ingestion and storage engine | Complete |
 | 3 | Single-node indexing and query engine | Complete |
-| 4 | Multi-node cluster formation and metadata coordination | Not started |
-| 5 | Distributed ingestion, partitioning, and replication | Not started |
-| 6 | Distributed query fan-out and result aggregation | Not started |
+| 4 | Multi-node cluster formation and metadata coordination | Complete |
+| 5 | Distributed ingestion, partitioning, and replication | Complete |
+| 6 | Distributed query fan-out and result aggregation | Complete |
 | 7 | Observability, deployment, and reliability | Not started |
 | 8 | Stretch goals and resume polish | Not started |
 
