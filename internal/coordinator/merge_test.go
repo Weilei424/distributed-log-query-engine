@@ -102,22 +102,22 @@ func TestMergeResults_Partial(t *testing.T) {
 	}
 }
 
-// TestMergeResults_NodeTotalPreferred verifies that when nodes report non-zero
-// totals, MergeResults uses their sum rather than the candidate count. This
-// matters when the per-node fetch limit truncates results below the true match
-// count — the reported total should not be capped by the candidate window.
-func TestMergeResults_NodeTotalPreferred(t *testing.T) {
+// TestMergeResults_TotalIsDeduplicatedCount verifies that total reflects the
+// deduplicated candidate count before pagination, not per-node totals. A
+// replicated entry that appears on two nodes must count as one.
+func TestMergeResults_TotalIsDeduplicatedCount(t *testing.T) {
+	shared := mkEntry("shared", 200)
 	parts := []nodeResult{
-		// Node reports 1500 matches but only returned 1000 due to its limit.
-		{nodeID: "n1", total: 1500, entries: []*types.LogEntry{mkEntry("e1", 100)}},
-		{nodeID: "n2", total: 800, entries: []*types.LogEntry{mkEntry("e2", 200)}},
+		{nodeID: "n1", total: 1500, entries: []*types.LogEntry{shared, mkEntry("e1", 100)}},
+		{nodeID: "n2", total: 800, entries: []*types.LogEntry{shared, mkEntry("e2", 300)}},
 	}
 	out := MergeResults(parts, 0, 10)
-	if out.total != 2300 {
-		t.Errorf("expected total=2300 (sum of node totals), got %d", out.total)
+	// 3 distinct IDs: shared, e1, e2
+	if out.total != 3 {
+		t.Errorf("expected total=3 (deduplicated count), got %d", out.total)
 	}
-	if len(out.entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(out.entries))
+	if len(out.entries) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(out.entries))
 	}
 }
 
