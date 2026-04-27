@@ -59,10 +59,16 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 	}
 	log.Printf("fanout: targeting %d nodes: %v", len(targets), ids)
 
-	// Each node must return at least offset+limit entries so the global merge
-	// can satisfy the client's full window. fanOutLimit is also a floor to
-	// avoid sending overly small limits when offset+limit is tiny.
-	nodeLimit := max(e.fanOutLimit, req.Offset+req.Limit)
+	// Resolve the effective client limit before computing the per-node limit
+	// so the default (100) is included in the candidate window calculation.
+	clientLimit := req.Limit
+	if clientLimit == 0 {
+		clientLimit = 100
+	}
+
+	// Each node must return at least offset+clientLimit entries so the global
+	// merge can satisfy the client's full window. fanOutLimit is also a floor.
+	nodeLimit := max(e.fanOutLimit, req.Offset+clientLimit)
 	fanReq := &logengine.QueryRequest{
 		Keyword:   req.Keyword,
 		Service:   req.Service,
@@ -131,12 +137,6 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 	var parts []nodeResult
 	for r := range ch {
 		parts = append(parts, r)
-	}
-
-	// Apply default limit when client sends 0.
-	clientLimit := req.Limit
-	if clientLimit == 0 {
-		clientLimit = 100
 	}
 
 	mergeStart := time.Now()
