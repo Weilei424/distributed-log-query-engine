@@ -102,6 +102,25 @@ func TestMergeResults_Partial(t *testing.T) {
 	}
 }
 
+// TestMergeResults_NodeTotalPreferred verifies that when nodes report non-zero
+// totals, MergeResults uses their sum rather than the candidate count. This
+// matters when the per-node fetch limit truncates results below the true match
+// count — the reported total should not be capped by the candidate window.
+func TestMergeResults_NodeTotalPreferred(t *testing.T) {
+	parts := []nodeResult{
+		// Node reports 1500 matches but only returned 1000 due to its limit.
+		{nodeID: "n1", total: 1500, entries: []*types.LogEntry{mkEntry("e1", 100)}},
+		{nodeID: "n2", total: 800, entries: []*types.LogEntry{mkEntry("e2", 200)}},
+	}
+	out := MergeResults(parts, 0, 10)
+	if out.total != 2300 {
+		t.Errorf("expected total=2300 (sum of node totals), got %d", out.total)
+	}
+	if len(out.entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(out.entries))
+	}
+}
+
 func TestMergeResults_AllFailed(t *testing.T) {
 	parts := []nodeResult{
 		{nodeID: "n1", err: errors.New("timeout")},
