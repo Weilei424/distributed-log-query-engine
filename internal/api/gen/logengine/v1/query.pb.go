@@ -115,7 +115,11 @@ type QueryResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Matching log entries, sorted by timestamp descending.
 	Entries []*LogEntry `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
-	// Total number of matching entries across all nodes (before limit/offset).
+	// Deduplicated candidate count across all responding nodes, before
+	// offset/limit are applied. This is a lower bound: each node is asked for
+	// at most max(fan_out_limit, offset+limit) entries, so if a node holds more
+	// matches than that window, total will undercount. When partial=true, failed
+	// nodes are excluded and total reflects only the responding subset.
 	Total int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	// True if one or more nodes did not respond within the deadline.
 	Partial bool `protobuf:"varint,3,opt,name=partial,proto3" json:"partial,omitempty"`
