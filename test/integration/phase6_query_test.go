@@ -13,6 +13,7 @@ import (
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
 	"github.com/Weilei424/distributed-log-query-engine/internal/coordinator"
 	"github.com/Weilei424/distributed-log-query-engine/internal/metadata"
+	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
 )
 
 // testPhase6Coordinator is a coordinator that also serves QueryService (fan-out).
@@ -81,9 +82,26 @@ func startPhase6Coordinator(t *testing.T, totalShards int) *testPhase6Coordinato
 	}
 }
 
-// TestDistributedQuery_AllNodes ingests entries to two storage nodes via the
-// orchestrator and verifies the coordinator's QueryService returns merged results
-// from both nodes.
+// writeEntryDirect writes a LogEntry directly to a node's local storage and
+// index, bypassing routing so the entry is guaranteed to live on that node.
+func writeEntryDirect(t *testing.T, node *testNode, id, service, message string) {
+	t.Helper()
+	e := &types.LogEntry{
+		ID:      id,
+		Service: service,
+		Level:   "INFO",
+		Message: message,
+	}
+	path, err := node.manager.AppendWithPath(e)
+	if err != nil {
+		t.Fatalf("AppendWithPath on %s: %v", node.nodeID, err)
+	}
+	node.idx.Add(e, path)
+}
+
+// TestDistributedQuery_AllNodes writes one entry directly to each storage node
+// (bypassing routing) and verifies the coordinator's QueryService merges results
+// from both nodes into a single response.
 func TestDistributedQuery_AllNodes(t *testing.T) {
 	const totalShards = 4
 	coord := startPhase6Coordinator(t, totalShards)
@@ -113,44 +131,42 @@ func TestDistributedQuery_AllNodes(t *testing.T) {
 		t.Fatal("node-b never became healthy")
 	}
 
-	// Ingest one entry directly to each node's local storage (bypassing routing
-	// to ensure each node holds exactly one entry regardless of shard assignment).
-	nodeAIngest := nodeA.ingestClient(t)
-	nodeBIngest := nodeB.ingestClient(t)
+	// Write directly to each node's storage and index so each node definitely
+	// holds its own entry — independent of shard routing decisions.
+	writeEntryDirect(t, nodeA, "entry-from-a", "svc-a", "message on node a")
+	writeEntryDirect(t, nodeB, "entry-from-b", "svc-b", "message on node b")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if _, err := nodeAIngest.Ingest(ctx, &logengine.IngestRequest{
-		Entry: &logengine.LogEntry{
-			Id: "entry-from-a", Service: "svc-a", Level: "INFO",
-			Message: "message on node a",
-		},
-	}); err != nil {
-		t.Fatalf("Ingest to node-a: %v", err)
-	}
-	if _, err := nodeBIngest.Ingest(ctx, &logengine.IngestRequest{
-		Entry: &logengine.LogEntry{
-			Id: "entry-from-b", Service: "svc-b", Level: "INFO",
-			Message: "message on node b",
-		},
-	}); err != nil {
-		t.Fatalf("Ingest to node-b: %v", err)
-	}
-
-	// Wait for replication to settle before querying.
-	time.Sleep(200 * time.Millisecond)
-
-	// Sanity-check: node-a should hold at least one entry locally.
+	// Verify each node holds its entry locally before querying the coordinator.
 	nodeAQuery := nodeA.queryClient(t)
 	nodeAResp, err := nodeAQuery.Query(ctx, &logengine.QueryRequest{Limit: 100})
 	if err != nil {
 		t.Fatalf("node-a direct Query: %v", err)
 	}
-	if len(nodeAResp.Entries) == 0 {
-		t.Error("expected node-a to hold at least one entry after ingest")
+	nodeAIDs := make(map[string]bool)
+	for _, e := range nodeAResp.Entries {
+		nodeAIDs[e.Id] = true
+	}
+	if !nodeAIDs["entry-from-a"] {
+		t.Fatal("entry-from-a not visible on node-a before coordinator query")
 	}
 
+	nodeBQuery := nodeB.queryClient(t)
+	nodeBResp, err := nodeBQuery.Query(ctx, &logengine.QueryRequest{Limit: 100})
+	if err != nil {
+		t.Fatalf("node-b direct Query: %v", err)
+	}
+	nodeBIDs := make(map[string]bool)
+	for _, e := range nodeBResp.Entries {
+		nodeBIDs[e.Id] = true
+	}
+	if !nodeBIDs["entry-from-b"] {
+		t.Fatal("entry-from-b not visible on node-b before coordinator query")
+	}
+
+	// Query the coordinator: it must fan out to both nodes and merge.
 	coordQuery := coord.queryClient(t)
 	resp, err := coordQuery.Query(ctx, &logengine.QueryRequest{Limit: 100})
 	if err != nil {
@@ -161,8 +177,7 @@ func TestDistributedQuery_AllNodes(t *testing.T) {
 		t.Error("expected Partial=false; both nodes should respond")
 	}
 
-	// We expect at least 2 distinct entry IDs (one from each node).
-	// Replication may have copied entries, but dedup by ID ensures each appears once.
+	// Dedup by ID — replication may have copied entries across nodes.
 	ids := make(map[string]bool)
 	for _, e := range resp.Entries {
 		ids[e.Id] = true
@@ -173,6 +188,22 @@ func TestDistributedQuery_AllNodes(t *testing.T) {
 	if !ids["entry-from-b"] {
 		t.Error("coordinator response missing entry-from-b")
 	}
+}
+
+// startFastCoordinator starts a second coordinator gRPC server that uses a
+// short per-node timeout (500 ms) so partial-failure tests don't stall.
+func startFastCoordinator(t *testing.T, fsm coordinator.ClusterStateProvider) string {
+	t.Helper()
+	lis, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatalf("listen fast-coord: %v", err)
+	}
+	fastExec := coordinator.NewFanOutExecutor(fsm, 500, 1000)
+	grpcSrv := grpc.NewServer()
+	logengine.RegisterQueryServiceServer(grpcSrv, coordinator.NewFanOutQueryServer(fastExec))
+	go grpcSrv.Serve(lis) //nolint:errcheck
+	t.Cleanup(grpcSrv.GracefulStop)
+	return lis.Addr().String()
 }
 
 // TestDistributedQuery_PartialFailure stops one storage node before querying and
@@ -198,48 +229,37 @@ func TestDistributedQuery_PartialFailure(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	// Ingest one entry to node-b (the node that will survive).
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	nodeBIngest := nodeB.ingestClient(t)
-	// svc-c hashes to shard 1 (fnv32a("svc-c") % 4 == 1), which node-b owns as
-	// primary after two-node round-robin assignment. This ensures the entry is
-	// written locally to node-b rather than forwarded to node-a.
-	if _, err := nodeBIngest.Ingest(ctx, &logengine.IngestRequest{
-		Entry: &logengine.LogEntry{
-			Id: "survivor-entry", Service: "svc-c", Level: "INFO",
-			Message: "this node survived",
-		},
-	}); err != nil {
-		t.Fatalf("Ingest to node-b: %v", err)
-	}
-
-	// Wait a moment for the write to persist before stopping node-a.
-	time.Sleep(50 * time.Millisecond)
+	// Write directly to node-b so its entry is guaranteed to be local.
+	writeEntryDirect(t, nodeB, "survivor-entry", "svc-c", "this node survived")
 
 	// Stop node-a so the coordinator's fan-out will fail for it.
 	nodeA.cleanup()
 	time.Sleep(100 * time.Millisecond)
 
-	// Use a short per-node timeout so the test does not wait too long for the dead node.
-	fastExec := coordinator.NewFanOutExecutor(coord.fsm, 500, 1000)
-	fastSrv := coordinator.NewFanOutQueryServer(fastExec)
+	// Use a short per-node timeout coordinator so the test does not stall on the dead node.
+	fastCoordAddr := startFastCoordinator(t, coord.fsm)
 
-	// Call Execute directly (without gRPC overhead) to avoid needing a second listener.
-	result, err := fastExec.Execute(ctx, &logengine.QueryRequest{Limit: 100})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	conn, err := grpc.NewClient(fastCoordAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		t.Fatalf("Execute: %v", err)
+		t.Fatalf("dial fast coordinator: %v", err)
 	}
-	_ = fastSrv // used to confirm it compiles
+	defer conn.Close()
 
-	if !result.Partial {
+	resp, err := logengine.NewQueryServiceClient(conn).Query(ctx, &logengine.QueryRequest{Limit: 100})
+	if err != nil {
+		t.Fatalf("coordinator Query: %v", err)
+	}
+
+	if !resp.Partial {
 		t.Error("expected Partial=true when node-a is unreachable")
 	}
 
 	found := false
-	for _, e := range result.Entries {
-		if e.ID == "survivor-entry" {
+	for _, e := range resp.Entries {
+		if e.Id == "survivor-entry" {
 			found = true
 		}
 	}
