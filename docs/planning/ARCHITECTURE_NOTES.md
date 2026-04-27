@@ -196,6 +196,15 @@ Reason:
 
 ---
 
+## Decision 7: QueryResponse.total is a lower bound, not an exact count
+The coordinator asks each node for at most `max(fan_out_limit, offset+limit)` entries. The `total` field in `QueryResponse` is the deduplicated count of candidates returned across all responding nodes, before offset/limit are applied.
+
+This means `total` can undercount when a node holds more matching entries than the fetch window. A separate per-node count RPC would be needed for an exact total, which is out of scope for v1.
+
+Callers must treat `total` as a lower bound. The proto comment documents this explicitly. The pagination window (offset+limit) is always fully satisfiable regardless of this limitation.
+
+---
+
 ## 6. Data Model
 
 A v1 log entry should be simple and stable.
