@@ -78,11 +78,11 @@ type mergeOutput struct {
 1. Combine entries from all non-errored node results.
 2. Deduplicate by `entry.ID` using a seen-set (`map[string]struct{}`). First occurrence wins.
 3. Sort: timestamp descending, entry ID ascending as tie-breaker (matches local executor sort).
-4. `total` = length of deduplicated slice before pagination.
+4. `total` = deduplicated candidate count before pagination (a lower bound — see Decision 7).
 5. Apply client `offset` then `limit`.
 6. `partial = true` if any node result had a non-nil `err`.
 
-**Note on `total`:** When `partial` is true, `total` is a lower bound — it reflects only the responding nodes. This is documented behavior consistent with Architecture Notes Decision 6.
+**Note on `total`:** `total` is always a lower bound. Each node returns at most `max(fan_out_limit, offset+limit)` entries; if a node's true match set exceeds that window, `total` will undercount. When `partial=true`, failed nodes are also excluded, making `total` a lower bound of a lower bound. See Architecture Notes Decision 7.
 
 ### `internal/coordinator/query_server.go`
 
