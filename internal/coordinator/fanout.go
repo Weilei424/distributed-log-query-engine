@@ -59,14 +59,16 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 	}
 	log.Printf("fanout: targeting %d nodes: %v", len(targets), ids)
 
-	// Nodes receive the full fan-out limit so the coordinator has enough
-	// candidate entries to correctly apply the client's offset and limit.
+	// Each node must return at least offset+limit entries so the global merge
+	// can satisfy the client's full window. fanOutLimit is also a floor to
+	// avoid sending overly small limits when offset+limit is tiny.
+	nodeLimit := max(e.fanOutLimit, req.Offset+req.Limit)
 	fanReq := &logengine.QueryRequest{
 		Keyword:   req.Keyword,
 		Service:   req.Service,
 		StartTime: req.StartTime,
 		EndTime:   req.EndTime,
-		Limit:     e.fanOutLimit,
+		Limit:     nodeLimit,
 		Offset:    0,
 	}
 
@@ -119,6 +121,12 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 
 	wg.Wait()
 	close(ch)
+
+	// If the parent context was canceled or deadline exceeded, return that
+	// error directly — treating all node failures as partial would hide it.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	var parts []nodeResult
 	for r := range ch {
