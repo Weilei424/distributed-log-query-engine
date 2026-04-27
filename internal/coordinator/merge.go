@@ -27,11 +27,15 @@ type mergeOutput struct {
 //
 // Deduplication is by entry ID (same entry may appear on primary and replica).
 // Sort order is timestamp descending, entry ID ascending as tie-breaker.
-// total reflects the deduplicated count before pagination.
+// total is the sum of per-node totals reported by successful nodes. This is a
+// cross-node approximation: replicated entries may inflate the count, but it
+// honors the proto contract that total is before offset/limit rather than
+// being capped by the candidate window.
 // partial is true when any nodeResult has a non-nil err.
 // When limit is 0, all entries after the offset are returned.
 func MergeResults(parts []nodeResult, offset, limit int32) mergeOutput {
 	var partial bool
+	var nodeTotal int32
 	seen := make(map[string]struct{})
 	var combined []*types.LogEntry
 
@@ -40,6 +44,7 @@ func MergeResults(parts []nodeResult, offset, limit int32) mergeOutput {
 			partial = true
 			continue
 		}
+		nodeTotal += p.total
 		for _, e := range p.entries {
 			if _, ok := seen[e.ID]; ok {
 				continue
@@ -56,7 +61,12 @@ func MergeResults(parts []nodeResult, offset, limit int32) mergeOutput {
 		return combined[i].ID < combined[j].ID
 	})
 
-	total := int32(len(combined))
+	// Fall back to candidate count when nodes report 0 (avoids returning
+	// total=0 for nodes that do not populate the field).
+	total := nodeTotal
+	if total == 0 {
+		total = int32(len(combined))
+	}
 
 	off := int(offset)
 	if off > len(combined) {
