@@ -46,7 +46,7 @@ Replace the struct in `pkg/types/query.go`:
 // QueryResult holds the output of a log query.
 type QueryResult struct {
 	Entries []*LogEntry
-	Total   int32 // total matching entries before limit/offset
+	Total   int32 // lower-bound candidate count before limit/offset (see Architecture Notes Decision 7)
 	TookMs  int64
 	Partial bool // true if one or more source nodes did not respond within the deadline
 }
@@ -254,7 +254,7 @@ type mergeOutput struct {
 //
 // Deduplication is by entry ID (same entry may appear on primary and replica).
 // Sort order is timestamp descending, entry ID ascending as tie-breaker.
-// total reflects the deduplicated count before pagination.
+// total is the deduplicated candidate count before pagination (lower bound — see Decision 7).
 // partial is true when any nodeResult has a non-nil err.
 // When limit is 0, all entries after the offset are returned.
 func MergeResults(parts []nodeResult, offset, limit int32) mergeOutput {
