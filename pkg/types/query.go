@@ -15,7 +15,7 @@ type QueryRequest struct {
 // QueryResult holds the output of a log query.
 type QueryResult struct {
 	Entries []*LogEntry
-	Total   int32 // total matching entries before limit/offset
+	Total   int32 // lower-bound candidate count before limit/offset (see Architecture Notes Decision 7)
 	TookMs  int64
 	Partial bool // true if one or more source nodes did not respond within the deadline
 }
