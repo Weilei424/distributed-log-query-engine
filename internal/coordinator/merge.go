@@ -27,9 +27,10 @@ type mergeOutput struct {
 //
 // Deduplication is by entry ID (same entry may appear on primary and replica).
 // Sort order is timestamp descending, entry ID ascending as tie-breaker.
-// total is the deduplicated candidate count before pagination. Because each node
-// is asked for at least offset+limit entries, the window is always satisfiable;
-// total may still undercount when a node's true match set exceeds its fetch limit.
+// total is the deduplicated candidate count before pagination (a lower bound).
+// Each node is asked for at least offset+limit entries so the result window is
+// always satisfiable, but total undercounts when a node's true match set
+// exceeds its fetch limit. This is the documented tradeoff for this design.
 // partial is true when any nodeResult has a non-nil err.
 // When limit is 0, all entries after the offset are returned.
 func MergeResults(parts []nodeResult, offset, limit int32) mergeOutput {
