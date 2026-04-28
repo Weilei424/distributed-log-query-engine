@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/Weilei424/distributed-log-query-engine/internal/cluster"
 )
 
@@ -21,7 +23,7 @@ func (s *stubSender) SendHeartbeat(ctx context.Context) error {
 
 func TestHeartbeatSender_StopsOnCancel(t *testing.T) {
 	stub := &stubSender{}
-	sender := cluster.NewHeartbeatSender(stub, 20*time.Millisecond)
+	sender := cluster.NewHeartbeatSender(stub, 20*time.Millisecond, "test-node", zap.NewNop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
