@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -97,13 +98,13 @@ func startPhase5Node(t *testing.T, nodeID string, coordAddr string, totalShards 
 	stateCache.Refresh(ctx)
 	go stateCache.Run(ctx)
 
-	repl := replication.NewReplicator(totalShards)
+	repl := replication.NewReplicator(totalShards, nodeID, zap.NewNop())
 	orch := ingest.NewOrchestrator(nodeID, totalShards, stateCache, m, idx, repl)
 	srv := ingest.NewServer(orch, nodeID, totalShards, m, idx)
 
 	grpcSrv := grpc.NewServer()
 	logengine.RegisterIngestServiceServer(grpcSrv, srv)
-	querySrv := query.NewQueryServer(query.NewLocalExecutor(idx, m))
+	querySrv := query.NewQueryServer(query.NewLocalExecutor(idx, m), nodeID, zap.NewNop())
 	logengine.RegisterQueryServiceServer(grpcSrv, querySrv)
 	go grpcSrv.Serve(lis) //nolint:errcheck
 
