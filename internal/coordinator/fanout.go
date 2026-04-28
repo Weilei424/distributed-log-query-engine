@@ -2,12 +2,14 @@ package coordinator
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
 	"github.com/Weilei424/distributed-log-query-engine/internal/metadata"
+	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
 )
 
@@ -23,18 +25,20 @@ type FanOutExecutor struct {
 	pool          *nodeClientPool
 	nodeTimeoutMs int64
 	fanOutLimit   int32
+	logger        *zap.Logger
 }
 
 // NewFanOutExecutor creates a FanOutExecutor.
 // nodeTimeoutMs is the per-node query deadline in milliseconds.
 // fanOutLimit is the limit sent to each node (overrides the client limit so
 // the global merge has enough candidates to apply offset+limit correctly).
-func NewFanOutExecutor(state ClusterStateProvider, nodeTimeoutMs int64, fanOutLimit int32) *FanOutExecutor {
+func NewFanOutExecutor(state ClusterStateProvider, nodeTimeoutMs int64, fanOutLimit int32, logger *zap.Logger) *FanOutExecutor {
 	return &FanOutExecutor{
 		state:         state,
 		pool:          newNodeClientPool(),
 		nodeTimeoutMs: nodeTimeoutMs,
 		fanOutLimit:   fanOutLimit,
+		logger:        logger,
 	}
 }
 
@@ -42,6 +46,9 @@ func NewFanOutExecutor(state ClusterStateProvider, nodeTimeoutMs int64, fanOutLi
 // The result's Partial field is true if any node failed to respond.
 func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryRequest) (*types.QueryResult, error) {
 	start := time.Now()
+	defer func() {
+		observability.QueryDuration.WithLabelValues("coordinator", "fanout").Observe(time.Since(start).Seconds())
+	}()
 
 	cs := e.state.State()
 
@@ -57,7 +64,7 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 	for i, t := range targets {
 		ids[i] = t.id + "=" + t.addr
 	}
-	log.Printf("fanout: targeting %d nodes: %v", len(targets), ids)
+	e.logger.Info("fanout targeting nodes", zap.Int("count", len(targets)), zap.Strings("nodes", ids))
 
 	// Resolve the effective client limit before computing the per-node limit
 	// so the default (100) is included in the candidate window calculation.
@@ -92,7 +99,7 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 
 			client, err := e.pool.get(t.addr)
 			if err != nil {
-				log.Printf("fanout: node %s error: %v", t.id, err)
+				e.logger.Warn("fanout node error", zap.String("node_id", t.id), zap.Error(err))
 				ch <- nodeResult{nodeID: t.id, err: err}
 				return
 			}
@@ -100,9 +107,10 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 			resp, err := client.Query(nodeCtx, fanReq)
 			if err != nil {
 				if nodeCtx.Err() != nil {
-					log.Printf("fanout: node %s timed out", t.id)
+					observability.FanOutTimeoutsTotal.Inc()
+					e.logger.Warn("fanout node timeout", zap.String("node_id", t.id))
 				} else {
-					log.Printf("fanout: node %s error: %v", t.id, err)
+					e.logger.Warn("fanout node error", zap.String("node_id", t.id), zap.Error(err))
 				}
 				ch <- nodeResult{nodeID: t.id, err: err}
 				return
@@ -120,7 +128,7 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 					Fields:     pb.Fields,
 				}
 			}
-			log.Printf("fanout: node %s responded: %d entries", t.id, len(entries))
+			e.logger.Info("fanout node responded", zap.String("node_id", t.id), zap.Int("entries", len(entries)))
 			ch <- nodeResult{nodeID: t.id, entries: entries, total: resp.Total}
 		}()
 	}
@@ -141,8 +149,14 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 
 	mergeStart := time.Now()
 	out := MergeResults(parts, req.Offset, clientLimit)
-	log.Printf("fanout: merge took %dms, total=%d, partial=%v",
-		time.Since(mergeStart).Milliseconds(), out.total, out.partial)
+	if out.partial {
+		observability.FanOutPartialTotal.Inc()
+	}
+	e.logger.Info("fanout complete",
+		zap.Int64("merge_ms", time.Since(mergeStart).Milliseconds()),
+		zap.Int32("total", out.total),
+		zap.Bool("partial", out.partial),
+	)
 
 	return &types.QueryResult{
 		Entries: out.entries,
