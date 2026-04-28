@@ -1,0 +1,20 @@
+coordinator:
+  replicas: 3
+  image: logengine-coordinator:latest
+  grpcPort: 9000
+  httpPort: 8080
+  totalShards: 16
+  storageSize: 500Mi
+
+node:
+  replicas: 3
+  image: logengine-node:latest
+  grpcPort: 50051
+  metricsPort: 9090
+  storageSize: 1Gi
+  maxSegmentBytes: 67108864
+
+prometheus:
+  enabled: true
+  image: prom/prometheus:v2.51.0
+  port: 9090
