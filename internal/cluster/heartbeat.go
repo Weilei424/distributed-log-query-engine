@@ -2,8 +2,11 @@ package cluster
 
 import (
 	"context"
-	"log"
 	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 )
 
 // Beater abstracts the heartbeat send operation for testability.
@@ -15,11 +18,13 @@ type Beater interface {
 type HeartbeatSender struct {
 	beater   Beater
 	interval time.Duration
+	nodeID   string
+	logger   *zap.Logger
 }
 
 // NewHeartbeatSender creates a HeartbeatSender with the given send interval.
-func NewHeartbeatSender(b Beater, interval time.Duration) *HeartbeatSender {
-	return &HeartbeatSender{beater: b, interval: interval}
+func NewHeartbeatSender(b Beater, interval time.Duration, nodeID string, logger *zap.Logger) *HeartbeatSender {
+	return &HeartbeatSender{beater: b, interval: interval, nodeID: nodeID, logger: logger}
 }
 
 // Run sends heartbeats at the configured interval until ctx is cancelled.
@@ -32,7 +37,10 @@ func (h *HeartbeatSender) Run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := h.beater.SendHeartbeat(ctx); err != nil {
-				log.Printf("heartbeat: %v", err)
+				h.logger.Warn("heartbeat failed", zap.Error(err))
+				observability.NodeHealthStatus.WithLabelValues(h.nodeID).Set(0)
+			} else {
+				observability.NodeHealthStatus.WithLabelValues(h.nodeID).Set(1)
 			}
 		}
 	}
