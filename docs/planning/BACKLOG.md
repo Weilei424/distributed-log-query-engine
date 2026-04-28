@@ -186,21 +186,23 @@
 
 ## Phase 7 — Observability, Deployment, and Reliability
 
-- [ ] Prometheus metrics exposed by all long-running services
-- [ ] Metrics: ingestion rate, ingestion failure count, append latency
-- [ ] Metrics: active segment size, number of mounted segments, index token count
-- [ ] Metrics: local query latency, fan-out latency, timeout count, partial response count
-- [ ] Metrics: heartbeat health status, replication lag
-- [ ] Structured logs with stable keys: timestamp, level, component, node_id, request_id, shard_id, message
-- [ ] Request IDs propagated through write and query paths
-- [ ] Grafana dashboard: ingestion throughput, query p50/p95 latency, node health, segment growth, error counts
-- [ ] Dockerized services for all node types
-- [ ] Docker Compose updated for full multi-node local cluster with Prometheus and Grafana
-- [ ] Kubernetes manifests or Helm chart for cluster deployment demo (`deployments/kubernetes/`)
-- [ ] Load test scripts for ingestion and query benchmarking
-- [ ] Failure scenario: node crash with observable recovery behavior
-- [ ] `make run-local` starts full stack locally
-- [ ] `make test` passes
+### Status: Complete
+
+- [x] Prometheus metrics exposed by all long-running services
+- [x] Metrics: ingestion rate, ingestion failure count, append latency
+- [x] Metrics: active segment size, number of mounted segments, index token count
+- [x] Metrics: local query latency, fan-out latency, timeout count, partial response count
+- [x] Metrics: heartbeat health status, replication lag
+- [x] Structured logs with stable keys: timestamp, level, component, node_id, request_id, shard_id, message
+- [x] Request IDs propagated through write and query paths
+- [x] Grafana dashboard: ingestion throughput, query p50/p95 latency, node health, segment growth, error counts
+- [x] Dockerized services for all node types
+- [x] Docker Compose updated for full multi-node local cluster with Prometheus and Grafana
+- [x] Kubernetes manifests or Helm chart for cluster deployment demo (`deployments/kubernetes/`)
+- [x] Load test scripts for ingestion and query benchmarking
+- [x] Failure scenario: node crash with observable recovery behavior
+- [x] `make run-local` starts full stack locally
+- [x] `make test` passes
 
 ---
 
