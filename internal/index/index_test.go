@@ -127,6 +127,18 @@ func TestResolve_KeywordPartialToken_NoMatch(t *testing.T) {
 	}
 }
 
+func TestIndex_TokenCount(t *testing.T) {
+	idx := index.NewIndex()
+	if idx.TokenCount() != 0 {
+		t.Fatalf("expected 0 tokens initially, got %d", idx.TokenCount())
+	}
+	e := &types.LogEntry{Service: "svc", Message: "hello world", Timestamp: 1}
+	idx.Add(e, "seg1")
+	if idx.TokenCount() < 2 {
+		t.Fatalf("expected at least 2 tokens after adding entry with 2 words, got %d", idx.TokenCount())
+	}
+}
+
 func TestAdd_Concurrent(t *testing.T) {
 	idx := index.NewIndex()
 	var wg sync.WaitGroup
