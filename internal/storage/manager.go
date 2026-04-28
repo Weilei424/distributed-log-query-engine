@@ -8,10 +8,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
+	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
 )
 
@@ -26,12 +28,21 @@ type Manager struct {
 	active          *Segment
 	nextSeq         uint64
 	paths           []string
+	nodeID          string
+}
+
+// ManagerOption configures a Manager.
+type ManagerOption func(*Manager)
+
+// WithNodeID sets the node ID used in Prometheus metric labels.
+func WithNodeID(id string) ManagerOption {
+	return func(m *Manager) { m.nodeID = id }
 }
 
 // NewManager opens or creates dir, scans for existing *.seg files,
 // and reopens the most recent one as the active segment.
 // Creates the first segment if the directory is empty.
-func NewManager(dir string, maxSegmentBytes int64) (*Manager, error) {
+func NewManager(dir string, maxSegmentBytes int64, opts ...ManagerOption) (*Manager, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir %s: %w", dir, err)
 	}
@@ -53,6 +64,9 @@ func NewManager(dir string, maxSegmentBytes int64) (*Manager, error) {
 		paths:           matches,
 		nextSeq:         nextSeq,
 	}
+	for _, opt := range opts {
+		opt(m)
+	}
 
 	if len(matches) == 0 {
 		if err := m.openNewSegment(); err != nil {
@@ -66,6 +80,7 @@ func NewManager(dir string, maxSegmentBytes int64) (*Manager, error) {
 		m.active = seg
 	}
 
+	observability.MountedSegmentsTotal.WithLabelValues(m.nodeID).Set(float64(len(m.paths)))
 	return m, nil
 }
 
@@ -118,7 +133,13 @@ func (m *Manager) appendLocked(entry *types.LogEntry) error {
 		}
 	}
 
-	return m.active.Append(data)
+	start := time.Now()
+	if err := m.active.Append(data); err != nil {
+		return err
+	}
+	observability.AppendDuration.WithLabelValues(m.nodeID).Observe(time.Since(start).Seconds())
+	observability.ActiveSegmentBytes.WithLabelValues(m.nodeID).Set(float64(m.active.Size()))
+	return nil
 }
 
 // SegmentPaths returns the absolute paths of all segment files in sequence order.
@@ -159,7 +180,11 @@ func (m *Manager) rotate() error {
 	if err := m.active.Close(); err != nil {
 		return fmt.Errorf("close active segment before rotation: %w", err)
 	}
-	return m.openNewSegment()
+	if err := m.openNewSegment(); err != nil {
+		return err
+	}
+	observability.MountedSegmentsTotal.WithLabelValues(m.nodeID).Set(float64(len(m.paths)))
+	return nil
 }
 
 // nextSeqFromMatches returns the next sequence number by parsing the last filename.
