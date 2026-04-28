@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: coordinator
+  namespace: logengine
+spec:
+  clusterIP: None
+  selector:
+    app: coordinator
+  ports:
+  - name: grpc
+    port: {{ .Values.coordinator.grpcPort }}
+  - name: http
+    port: {{ .Values.coordinator.httpPort }}
+  - name: raft
+    port: 7000
