@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
@@ -36,7 +37,7 @@ func startInProcessQueryNode(t *testing.T) (addr string, mgr *storage.Manager, i
 	idx = index.NewIndex()
 
 	executor := query.NewLocalExecutor(idx, mgr)
-	querySrv := query.NewQueryServer(executor)
+	querySrv := query.NewQueryServer(executor, "", zap.NewNop())
 
 	lis, err := net.Listen("tcp", ":0")
 	if err != nil {
@@ -85,7 +86,7 @@ func TestFanOutExecutor_MergesFromTwoNodes(t *testing.T) {
 		Shards: map[int]metadata.ShardRecord{},
 	}
 
-	exec := NewFanOutExecutor(&staticStateProvider{state}, 5000, 1000)
+	exec := NewFanOutExecutor(&staticStateProvider{state}, 5000, 1000, zap.NewNop())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -128,7 +129,7 @@ func TestFanOutExecutor_SkipsUnhealthyNodes(t *testing.T) {
 		Shards: map[int]metadata.ShardRecord{},
 	}
 
-	exec := NewFanOutExecutor(&staticStateProvider{state}, 5000, 1000)
+	exec := NewFanOutExecutor(&staticStateProvider{state}, 5000, 1000, zap.NewNop())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -161,7 +162,7 @@ func TestFanOutExecutor_PartialOnNodeFailure(t *testing.T) {
 		Shards: map[int]metadata.ShardRecord{},
 	}
 
-	exec := NewFanOutExecutor(&staticStateProvider{state}, 500, 1000)
+	exec := NewFanOutExecutor(&staticStateProvider{state}, 500, 1000, zap.NewNop())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
