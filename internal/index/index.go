@@ -155,6 +155,13 @@ func (idx *Index) Resolve(keyword, service string, startTime, endTime int64) []s
 	return paths
 }
 
+// TokenCount returns the number of unique tokens in the index.
+func (idx *Index) TokenCount() int {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return len(idx.tokenSegments)
+}
+
 // RebuildFromSegments repopulates the index from a list of segment files.
 // readFn is called for each path to load its entries.
 // Returns a wrapped error if any segment cannot be read.
