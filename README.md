@@ -49,6 +49,33 @@ make lint
 
 ---
 
+## Running the Full Stack
+
+Start the complete multi-node cluster with Prometheus and Grafana:
+
+```bash
+make run-local
+```
+
+This runs all three storage nodes, three coordinator replicas, Prometheus, and Grafana via Docker Compose.
+
+| Service | URL |
+|---------|-----|
+| Grafana (Log Engine dashboard) | http://localhost:3000 |
+| Prometheus | http://localhost:9095 |
+
+Run a load test against the live cluster:
+
+```bash
+make load-test                                   # both ingest and query, 30s
+make load-test ADDR=localhost:9001 DURATION=20s MODE=ingest
+make load-test ADDR=localhost:9001 DURATION=20s MODE=query
+```
+
+To walk through a full failure and recovery scenario, see [`docs/runbooks/failure-demo.md`](docs/runbooks/failure-demo.md).
+
+---
+
 ## Development Commands
 
 | Command | Description |
@@ -56,7 +83,8 @@ make lint
 | `make build` | Compile all packages |
 | `make test` | Run all tests |
 | `make lint` | Run golangci-lint |
-| `make run-local` | Verify project compiles (Phase 1) |
+| `make run-local` | Start the full local cluster (nodes, coordinators, Prometheus, Grafana) |
+| `make load-test` | Run a load test against a live cluster |
 | `make proto` | Regenerate Go bindings from proto sources |
 | `make proto-lint` | Lint proto source files |
 
@@ -72,7 +100,7 @@ make lint
 | 4 | Multi-node cluster formation and metadata coordination | Complete |
 | 5 | Distributed ingestion, partitioning, and replication | Complete |
 | 6 | Distributed query fan-out and result aggregation | Complete |
-| 7 | Observability, deployment, and reliability | Not started |
+| 7 | Observability, deployment, and reliability | Complete |
 | 8 | Stretch goals and resume polish | Not started |
 
 See [`docs/planning/IMPLEMENTATION_PLAN.md`](docs/planning/IMPLEMENTATION_PLAN.md) for full phase descriptions and success criteria.
