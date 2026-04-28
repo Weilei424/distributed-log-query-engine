@@ -63,8 +63,10 @@ services:
       - NODE_GRPC_ADDR=node-1:50051
       - DATA_DIR=/data
       - COORDINATOR_ADDRS=coordinator-1:9000,coordinator-2:9000,coordinator-3:9000
+      - METRICS_ADDR=:9090
     ports:
       - "50051:50051"
+      - "9091:9090"
     volumes:
       - data-node-1:/data
     depends_on:
@@ -82,8 +84,10 @@ services:
       - NODE_GRPC_ADDR=node-2:50051
       - DATA_DIR=/data
       - COORDINATOR_ADDRS=coordinator-1:9000,coordinator-2:9000,coordinator-3:9000
+      - METRICS_ADDR=:9090
     ports:
       - "50052:50051"
+      - "9092:9090"
     volumes:
       - data-node-2:/data
     depends_on:
@@ -101,14 +105,40 @@ services:
       - NODE_GRPC_ADDR=node-3:50051
       - DATA_DIR=/data
       - COORDINATOR_ADDRS=coordinator-1:9000,coordinator-2:9000,coordinator-3:9000
+      - METRICS_ADDR=:9090
     ports:
       - "50053:50051"
+      - "9093:9090"
     volumes:
       - data-node-3:/data
     depends_on:
       - coordinator-1
       - coordinator-2
       - coordinator-3
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9095:9090"
+    depends_on:
+      - node-1
+      - node-2
+      - node-3
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/etc/grafana/dashboards
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    depends_on:
+      - prometheus
 
 volumes:
   raft-data-1:
