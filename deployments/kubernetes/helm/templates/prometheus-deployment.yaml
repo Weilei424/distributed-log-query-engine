@@ -1,0 +1,31 @@
+{{- if .Values.prometheus.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: logengine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: {{ .Values.prometheus.image }}
+        args:
+          - "--config.file=/etc/prometheus/prometheus.yml"
+        ports:
+        - containerPort: {{ .Values.prometheus.port }}
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config
+{{- end }}
