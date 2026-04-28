@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -17,15 +16,22 @@ import (
 
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
 	"github.com/Weilei424/distributed-log-query-engine/internal/coordinator"
 	"github.com/Weilei424/distributed-log-query-engine/internal/metadata"
+	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 )
 
 func main() {
+	observability.Register(prometheus.DefaultRegisterer)
+
 	nodeID := envOrDefault("RAFT_NODE_ID", "coordinator-local")
+	coordLogger := observability.NewLogger("coordinator", nodeID)
 	bindAddr := envOrDefault("RAFT_BIND_ADDR", "127.0.0.1:7000")
 	dataDir := envOrDefault("RAFT_DATA_DIR", "./raft-data")
 	peersStr := envOrDefault("RAFT_PEERS", "")
@@ -86,7 +92,7 @@ func main() {
 	// gRPC server
 	grpcSrv := grpc.NewServer()
 	logengine.RegisterClusterServiceServer(grpcSrv, metadata.NewServer(r, fsm))
-	fanOutExec := coordinator.NewFanOutExecutor(fsm, nodeQueryTimeoutMs, fanOutLimit)
+	fanOutExec := coordinator.NewFanOutExecutor(fsm, nodeQueryTimeoutMs, fanOutLimit, coordLogger)
 	logengine.RegisterQueryServiceServer(grpcSrv, coordinator.NewFanOutQueryServer(fanOutExec))
 	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
@@ -102,6 +108,7 @@ func main() {
 			log.Printf("status encode: %v", err)
 		}
 	})
+	mux.Handle("/metrics", promhttp.Handler())
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -119,14 +126,18 @@ func main() {
 	}()
 	go metadata.StartLivenessChecker(ctx, r, fsm, heartbeatInterval, heartbeatTimeout)
 
-	fmt.Printf("coordinator started: id=%s raft=%s grpc=%s http=%s shards=%d node_query_timeout_ms=%d fan_out_limit=%d\n",
-		nodeID, bindAddr, grpcAddr, httpAddr, totalShards, nodeQueryTimeoutMs, fanOutLimit)
+	coordLogger.Info("coordinator started",
+		zap.String("raft_addr", bindAddr),
+		zap.String("grpc_addr", grpcAddr),
+		zap.String("http_addr", httpAddr),
+		zap.Int("shards", totalShards),
+	)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 
-	fmt.Println("shutting down...")
+	coordLogger.Info("shutting down")
 	cancel()
 	grpcSrv.GracefulStop()
 	if err := httpSrv.Shutdown(context.Background()); err != nil {
@@ -135,7 +146,7 @@ func main() {
 	if err := r.Shutdown().Error(); err != nil {
 		log.Printf("raft shutdown: %v", err)
 	}
-	fmt.Println("coordinator stopped")
+	coordLogger.Info("coordinator stopped")
 }
 
 func parsePeers(peersStr, selfID, selfAddr string) []raft.Server {
