@@ -1,0 +1,136 @@
+{
+  "title": "Log Engine",
+  "uid": "logengine-v1",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Ingestion Rate (entries/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(logengine_ingest_requests_total{status=\"ok\"}[1m])",
+          "legendFormat": "{{node_id}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Ingestion Error Rate (errors/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(logengine_ingest_requests_total{status=\"error\"}[1m])",
+          "legendFormat": "{{node_id}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Append Latency p50 / p95 (s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, rate(logengine_append_duration_seconds_bucket[1m]))",
+          "legendFormat": "p50 {{node_id}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(logengine_append_duration_seconds_bucket[1m]))",
+          "legendFormat": "p95 {{node_id}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Local Query Latency p50 / p95 (s)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, rate(logengine_query_duration_seconds_bucket{type=\"local\"}[1m]))",
+          "legendFormat": "p50 {{node_id}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(logengine_query_duration_seconds_bucket{type=\"local\"}[1m]))",
+          "legendFormat": "p95 {{node_id}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Fan-Out Query Latency p50 / p95 (s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, rate(logengine_query_duration_seconds_bucket{type=\"fanout\"}[1m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(logengine_query_duration_seconds_bucket{type=\"fanout\"}[1m]))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Active Segment Size (bytes)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "logengine_active_segment_bytes",
+          "legendFormat": "{{node_id}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Node Health Status",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "colorMode": "background",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "Unhealthy", "color": "red" }, "1": { "text": "Healthy", "color": "green" } } }
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "logengine_node_health_status",
+          "legendFormat": "{{node_id}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Replication Lag (pending entries)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "logengine_replication_lag_entries",
+          "legendFormat": "{{node_id}}"
+        }
+      ]
+    }
+  ]
+}
