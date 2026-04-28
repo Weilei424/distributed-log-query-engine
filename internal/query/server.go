@@ -5,10 +5,12 @@ import (
 	"errors"
 	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
+	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
 )
 
@@ -16,11 +18,13 @@ import (
 type QueryServer struct {
 	logengine.UnimplementedQueryServiceServer
 	executor *LocalExecutor
+	nodeID   string
+	logger   *zap.Logger
 }
 
 // NewQueryServer returns a QueryServer backed by the given executor.
-func NewQueryServer(executor *LocalExecutor) *QueryServer {
-	return &QueryServer{executor: executor}
+func NewQueryServer(executor *LocalExecutor, nodeID string, logger *zap.Logger) *QueryServer {
+	return &QueryServer{executor: executor, nodeID: nodeID, logger: logger}
 }
 
 // Query handles a gRPC Query request.
@@ -44,6 +48,14 @@ func (s *QueryServer) Query(ctx context.Context, req *logengine.QueryRequest) (*
 	}
 
 	result, err := s.executor.Execute(ctx, typesReq)
+	observability.QueryDuration.WithLabelValues(s.nodeID, "local").Observe(time.Since(start).Seconds())
+	if err == nil {
+		s.logger.Info("query",
+			zap.String("request_id", observability.RequestIDFromContext(ctx)),
+			zap.String("keyword", req.Keyword),
+			zap.Int("results", len(result.Entries)),
+		)
+	}
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return nil, status.Errorf(codes.Canceled, "query canceled")
