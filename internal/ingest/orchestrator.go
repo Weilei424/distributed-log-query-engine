@@ -15,6 +15,7 @@ import (
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
 	"github.com/Weilei424/distributed-log-query-engine/internal/cluster"
 	"github.com/Weilei424/distributed-log-query-engine/internal/index"
+	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 	"github.com/Weilei424/distributed-log-query-engine/internal/replication"
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
 )
@@ -113,6 +114,7 @@ func (o *Orchestrator) writeLocal(ctx context.Context, pb *logengine.LogEntry, r
 		return nil, status.Errorf(codes.Internal, "append failed: %v", err)
 	}
 	o.idx.Add(entry, segPath)
+	observability.IndexTokenCount.WithLabelValues(o.nodeID).Set(float64(o.idx.TokenCount()))
 
 	// Enqueue async replication if a replica is known and a replicator is wired.
 	if replicaNodeID != "" && o.replicator != nil && o.stateReader != nil {
