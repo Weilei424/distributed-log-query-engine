@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: coordinator
+  namespace: logengine
+spec:
+  serviceName: coordinator
+  replicas: {{ .Values.coordinator.replicas }}
+  selector:
+    matchLabels:
+      app: coordinator
+  template:
+    metadata:
+      labels:
+        app: coordinator
+    spec:
+      containers:
+      - name: coordinator
+        image: {{ .Values.coordinator.image }}
+        ports:
+        - containerPort: {{ .Values.coordinator.grpcPort }}
+          name: grpc
+        - containerPort: {{ .Values.coordinator.httpPort }}
+          name: http
+        - containerPort: 7000
+          name: raft
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: RAFT_NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: RAFT_BIND_ADDR
+          value: "$(POD_NAME).coordinator.logengine.svc.cluster.local:7000"
+        - name: RAFT_DATA_DIR
+          value: /raft-data
+        - name: RAFT_PEERS
+          value: {{ include "logengine.raftPeers" . | quote }}
+        - name: GRPC_ADDR
+          value: ":{{ .Values.coordinator.grpcPort }}"
+        - name: HTTP_ADDR
+          value: ":{{ .Values.coordinator.httpPort }}"
+        - name: TOTAL_SHARDS
+          value: "{{ .Values.coordinator.totalShards }}"
+        volumeMounts:
+        - name: raft-data
+          mountPath: /raft-data
+  volumeClaimTemplates:
+  - metadata:
+      name: raft-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.coordinator.storageSize }}
