@@ -5,6 +5,7 @@ import (
 	"net"
 	"testing"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -25,7 +26,7 @@ func newQueryServer(t *testing.T) *query.QueryServer {
 	}
 	t.Cleanup(func() { m.Close() })
 	idx := index.NewIndex()
-	return query.NewQueryServer(query.NewLocalExecutor(idx, m))
+	return query.NewQueryServer(query.NewLocalExecutor(idx, m), "", zap.NewNop())
 }
 
 func TestQueryServer_NegativeLimit_InvalidArgument(t *testing.T) {
@@ -87,7 +88,7 @@ func TestQueryServer_GRPCRoundTrip(t *testing.T) {
 
 	idx := index.NewIndex()
 	ingestSrv := ingest.NewLocalServer(m, idx)
-	querySrv := query.NewQueryServer(query.NewLocalExecutor(idx, m))
+	querySrv := query.NewQueryServer(query.NewLocalExecutor(idx, m), "", zap.NewNop())
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
