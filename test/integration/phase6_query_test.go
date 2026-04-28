@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/raft"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -67,7 +68,7 @@ func startPhase6Coordinator(t *testing.T, totalShards int) *testPhase6Coordinato
 	logengine.RegisterClusterServiceServer(grpcSrv, metadata.NewServer(r, fsm))
 
 	// Wire fan-out query service: 5 s per-node timeout, 1000 fan-out limit.
-	fanOutExec := coordinator.NewFanOutExecutor(fsm, 5000, 1000)
+	fanOutExec := coordinator.NewFanOutExecutor(fsm, 5000, 1000, zap.NewNop())
 	logengine.RegisterQueryServiceServer(grpcSrv, coordinator.NewFanOutQueryServer(fanOutExec))
 
 	go grpcSrv.Serve(lis) //nolint:errcheck
@@ -198,7 +199,7 @@ func startFastCoordinator(t *testing.T, fsm coordinator.ClusterStateProvider) st
 	if err != nil {
 		t.Fatalf("listen fast-coord: %v", err)
 	}
-	fastExec := coordinator.NewFanOutExecutor(fsm, 500, 1000)
+	fastExec := coordinator.NewFanOutExecutor(fsm, 500, 1000, zap.NewNop())
 	grpcSrv := grpc.NewServer()
 	logengine.RegisterQueryServiceServer(grpcSrv, coordinator.NewFanOutQueryServer(fastExec))
 	go grpcSrv.Serve(lis) //nolint:errcheck
