@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -104,7 +105,7 @@ func TestPhase5_CatchUp_ReplicaFetchesMissedEntries(t *testing.T) {
 	}
 
 	// Bring replica back up and verify it can receive ReplicateEntry calls.
-	repl2 := replication.NewReplicator(totalShards)
+	repl2 := replication.NewReplicator(totalShards, "node-b", zap.NewNop())
 	defer repl2.Stop()
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
