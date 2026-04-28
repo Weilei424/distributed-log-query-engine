@@ -1,0 +1,24 @@
+{{- if .Values.prometheus.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: logengine
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: coordinators
+        static_configs:
+          - targets:
+            {{- range $i := until (.Values.coordinator.replicas | int) }}
+              - coordinator-{{ $i }}.coordinator.logengine.svc.cluster.local:{{ $.Values.coordinator.httpPort }}
+            {{- end }}
+      - job_name: nodes
+        static_configs:
+          - targets:
+            {{- range $i := until (.Values.node.replicas | int) }}
+              - node-{{ $i }}.node.logengine.svc.cluster.local:{{ $.Values.node.metricsPort }}
+            {{- end }}
+{{- end }}
