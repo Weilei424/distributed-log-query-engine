@@ -5,12 +5,14 @@ import (
 	"context"
 	"sort"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
 	"github.com/Weilei424/distributed-log-query-engine/internal/cluster"
 	"github.com/Weilei424/distributed-log-query-engine/internal/index"
+	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
 )
 
@@ -26,6 +28,7 @@ type Server struct {
 	stateReader  cluster.ClusterStateReader // nil in local mode
 	manager      *storage.Manager
 	idx          *index.Index
+	logger       *zap.Logger
 }
 
 // NewServer creates a Server backed by the given orchestrator.
@@ -38,6 +41,7 @@ func NewServer(orchestrator *Orchestrator, nodeID string, totalShards int, manag
 		stateReader:  orchestrator.StateReader(),
 		manager:      manager,
 		idx:          idx,
+		logger:       zap.NewNop(),
 	}
 }
 
@@ -51,12 +55,33 @@ func NewLocalServer(manager *storage.Manager, idx *index.Index) *Server {
 		totalShards:  0,
 		manager:      manager,
 		idx:          idx,
+		logger:       zap.NewNop(),
 	}
 }
 
+// SetLogger replaces the no-op logger with a real one. Call once after construction.
+func (s *Server) SetLogger(l *zap.Logger) { s.logger = l }
+
 // Ingest delegates to the orchestrator for routing and local write.
 func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*logengine.IngestResponse, error) {
-	return s.orchestrator.HandleIngest(ctx, req)
+	reqID := observability.NewRequestID()
+	ctx = observability.WithRequestID(ctx, reqID)
+
+	resp, err := s.orchestrator.HandleIngest(ctx, req)
+
+	reqStatus := "ok"
+	if err != nil {
+		reqStatus = "error"
+	}
+	observability.IngestRequestsTotal.WithLabelValues(s.nodeID, reqStatus).Inc()
+
+	if err == nil {
+		s.logger.Info("ingest",
+			zap.String("request_id", reqID),
+			zap.String("service", req.Entry.GetService()),
+		)
+	}
+	return resp, err
 }
 
 // IngestBatch writes multiple log entries via the orchestrator.
@@ -112,6 +137,7 @@ func (s *Server) ReplicateEntry(ctx context.Context, req *logengine.ReplicateEnt
 		return nil, status.Errorf(codes.Internal, "replicate append failed: %v", err)
 	}
 	s.idx.Add(entry, segPath)
+	observability.IndexTokenCount.WithLabelValues(s.nodeID).Set(float64(s.idx.TokenCount()))
 	return &logengine.ReplicateEntryResponse{Ok: true}, nil
 }
 
