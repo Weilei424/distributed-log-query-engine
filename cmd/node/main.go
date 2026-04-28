@@ -3,28 +3,37 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
 	"github.com/Weilei424/distributed-log-query-engine/internal/cluster"
 	"github.com/Weilei424/distributed-log-query-engine/internal/index"
 	"github.com/Weilei424/distributed-log-query-engine/internal/ingest"
+	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 	"github.com/Weilei424/distributed-log-query-engine/internal/query"
 	"github.com/Weilei424/distributed-log-query-engine/internal/replication"
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
 )
 
 func main() {
+	observability.Register(prometheus.DefaultRegisterer)
+
 	nodeID := envOrDefault("NODE_ID", "node-local")
+	nodeLogger := observability.NewLogger("node", nodeID)
+	metricsAddr := envOrDefault("METRICS_ADDR", ":9090")
+
 	dataDir := envOrDefault("DATA_DIR", "./data")
 	grpcAddr := envOrDefault("GRPC_ADDR", ":50051")
 	advertisedAddr := envOrDefault("NODE_GRPC_ADDR", grpcAddr)
@@ -33,7 +42,17 @@ func main() {
 	heartbeatInterval := time.Duration(envIntOrDefault("HEARTBEAT_INTERVAL_SECONDS", 5)) * time.Second
 	totalShards := envIntOrDefault("TOTAL_SHARDS", 4)
 
-	manager, err := storage.NewManager(dataDir, maxSegBytes)
+	// Start metrics HTTP server.
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", promhttp.Handler())
+	metricsSrv := &http.Server{Addr: metricsAddr, Handler: metricsMux}
+	go func() {
+		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			nodeLogger.Warn("metrics server error", zap.Error(err))
+		}
+	}()
+
+	manager, err := storage.NewManager(dataDir, maxSegBytes, storage.WithNodeID(nodeID))
 	if err != nil {
 		log.Fatalf("storage.NewManager: %v", err)
 	}
@@ -69,7 +88,7 @@ func main() {
 				log.Printf("cluster register: %v (starting in local-only mode; restart required to join cluster)", err)
 				ingestSrv = ingest.NewLocalServer(manager, idx)
 			} else {
-				fmt.Printf("registered with coordinator: shards=%v\n", shards)
+				nodeLogger.Info("registered with coordinator", zap.Ints("shards", shards))
 
 				// Start state cache (initial refresh before accepting traffic).
 				stateCache := cluster.NewStateCache(clusterClient, 5*time.Second)
@@ -84,13 +103,13 @@ func main() {
 				}
 
 				// Build orchestrator.
-				repl := replication.NewReplicator(totalShards)
+				repl := replication.NewReplicator(totalShards, nodeID, nodeLogger)
 				defer repl.Stop()
 				orch := ingest.NewOrchestrator(nodeID, totalShards, stateCache, manager, idx, repl)
 				ingestSrv = ingest.NewServer(orch, nodeID, totalShards, manager, idx)
 
 				// Start heartbeat.
-				sender := cluster.NewHeartbeatSender(clusterClient, heartbeatInterval)
+				sender := cluster.NewHeartbeatSender(clusterClient, heartbeatInterval, nodeID, nodeLogger)
 				go sender.Run(ctx)
 			}
 		}
@@ -98,7 +117,9 @@ func main() {
 		ingestSrv = ingest.NewLocalServer(manager, idx)
 	}
 
-	querySrv = query.NewQueryServer(query.NewLocalExecutor(idx, manager))
+	ingestSrv.SetLogger(nodeLogger)
+
+	querySrv = query.NewQueryServer(query.NewLocalExecutor(idx, manager), nodeID, nodeLogger)
 
 	grpcSrv := grpc.NewServer()
 	logengine.RegisterIngestServiceServer(grpcSrv, ingestSrv)
@@ -109,7 +130,7 @@ func main() {
 		log.Fatalf("net.Listen %s: %v", grpcAddr, err)
 	}
 
-	fmt.Printf("node started: id=%s addr=%s data=%s\n", nodeID, grpcAddr, dataDir)
+	nodeLogger.Info("node started", zap.String("addr", grpcAddr), zap.String("data", dataDir))
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -121,13 +142,18 @@ func main() {
 	}()
 
 	<-stop
-	fmt.Println("shutting down...")
+	nodeLogger.Info("shutting down")
 	cancel()
 	grpcSrv.GracefulStop()
 	if err := manager.Close(); err != nil {
 		log.Printf("manager close: %v", err)
 	}
-	fmt.Println("node stopped")
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutCancel()
+	if err := metricsSrv.Shutdown(shutCtx); err != nil {
+		nodeLogger.Warn("metrics server shutdown error", zap.Error(err))
+	}
+	nodeLogger.Info("node stopped")
 }
 
 func envOrDefault(key, def string) string {
