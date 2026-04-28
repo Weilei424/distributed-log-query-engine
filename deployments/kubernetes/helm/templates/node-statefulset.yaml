@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: node
+  namespace: logengine
+spec:
+  serviceName: node
+  replicas: {{ .Values.node.replicas }}
+  selector:
+    matchLabels:
+      app: node
+  template:
+    metadata:
+      labels:
+        app: node
+    spec:
+      containers:
+      - name: node
+        image: {{ .Values.node.image }}
+        ports:
+        - containerPort: {{ .Values.node.grpcPort }}
+          name: grpc
+        - containerPort: {{ .Values.node.metricsPort }}
+          name: metrics
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: GRPC_ADDR
+          value: ":{{ .Values.node.grpcPort }}"
+        - name: NODE_GRPC_ADDR
+          value: "$(POD_NAME).node.logengine.svc.cluster.local:{{ .Values.node.grpcPort }}"
+        - name: DATA_DIR
+          value: /data
+        - name: COORDINATOR_ADDRS
+          value: {{ include "logengine.coordinatorAddrs" . | quote }}
+        - name: METRICS_ADDR
+          value: ":{{ .Values.node.metricsPort }}"
+        - name: MAX_SEGMENT_BYTES
+          value: "{{ .Values.node.maxSegmentBytes }}"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.node.storageSize }}
