@@ -3,14 +3,15 @@ package replication
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
+	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
 )
 
@@ -25,6 +26,8 @@ type replicaJob struct {
 // It maintains one buffered channel and one drain goroutine per target address.
 type Replicator struct {
 	totalShards int
+	nodeID      string
+	logger      *zap.Logger
 
 	mu       sync.Mutex
 	channels map[string]chan replicaJob
@@ -34,10 +37,12 @@ type Replicator struct {
 }
 
 // NewReplicator creates a Replicator. Call Stop to shut down gracefully.
-func NewReplicator(totalShards int) *Replicator {
+func NewReplicator(totalShards int, nodeID string, logger *zap.Logger) *Replicator {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Replicator{
 		totalShards: totalShards,
+		nodeID:      nodeID,
+		logger:      logger,
 		channels:    make(map[string]chan replicaJob),
 		ctx:         ctx,
 		cancel:      cancel,
@@ -50,8 +55,12 @@ func (r *Replicator) Enqueue(entry *types.LogEntry, shardID int, addr string) {
 	ch := r.getOrCreateChannel(addr)
 	select {
 	case ch <- replicaJob{entry: entry, shardID: shardID}:
+		observability.ReplicationLagEntries.WithLabelValues(r.nodeID).Set(float64(len(ch)))
 	default:
-		log.Printf("replicator: channel full for %s, dropping entry %s", addr, entry.ID)
+		r.logger.Warn("replication channel full, dropping entry",
+			zap.String("addr", addr),
+			zap.String("entry_id", entry.ID),
+		)
 	}
 }
 
@@ -72,7 +81,7 @@ func (r *Replicator) drain(addr string, ch chan replicaJob) {
 	defer r.wg.Done()
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Printf("replicator: connect to %s failed: %v", addr, err)
+		r.logger.Error("replicator connect failed", zap.String("addr", addr), zap.Error(err))
 		return
 	}
 	defer conn.Close()
@@ -106,7 +115,7 @@ func (r *Replicator) send(ctx context.Context, client logengine.IngestServiceCli
 		ShardId: int32(job.shardID),
 	})
 	if err != nil {
-		log.Printf("replicator: ReplicateEntry entry %s failed: %v", job.entry.ID, err)
+		r.logger.Warn("ReplicateEntry failed", zap.String("entry_id", job.entry.ID), zap.Error(err))
 	}
 }
 
