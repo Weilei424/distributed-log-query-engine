@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
@@ -43,7 +44,7 @@ func startFakeReplica(t *testing.T) (addr string, fake *fakeIngestServer) {
 func TestReplicator_DeliverEntry(t *testing.T) {
 	addr, fake := startFakeReplica(t)
 
-	r := replication.NewReplicator(4)
+	r := replication.NewReplicator(4, "test-node", zap.NewNop())
 	t.Cleanup(r.Stop)
 
 	entry := &types.LogEntry{ID: "e1", Service: "auth", Message: "hello"}
@@ -62,7 +63,7 @@ func TestReplicator_DeliverEntry(t *testing.T) {
 func TestReplicator_EnqueueNonBlocking(t *testing.T) {
 	// Use an address that no server listens on — connections will fail.
 	// The channel should still accept entries without blocking.
-	r := replication.NewReplicator(4)
+	r := replication.NewReplicator(4, "test-node", zap.NewNop())
 	t.Cleanup(r.Stop)
 
 	entry := &types.LogEntry{ID: "e1", Service: "auth", Message: "hello"}
@@ -84,7 +85,7 @@ func TestReplicator_EnqueueNonBlocking(t *testing.T) {
 
 func TestReplicator_StopsCleanly(t *testing.T) {
 	addr, _ := startFakeReplica(t)
-	r := replication.NewReplicator(4)
+	r := replication.NewReplicator(4, "test-node", zap.NewNop())
 
 	entry := &types.LogEntry{ID: "e1", Service: "auth", Message: "hello"}
 	r.Enqueue(entry, 0, addr)
