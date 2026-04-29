@@ -17,6 +17,7 @@ spec:
       containers:
       - name: coordinator
         image: {{ .Values.coordinator.image }}
+        imagePullPolicy: {{ .Values.coordinator.imagePullPolicy }}
         ports:
         - containerPort: {{ .Values.coordinator.grpcPort }}
           name: grpc
