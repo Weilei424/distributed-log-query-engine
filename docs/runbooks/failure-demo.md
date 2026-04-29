@@ -40,16 +40,29 @@ docker compose -f deployments/docker-compose/docker-compose.yml stop node-1
 
 ### 5. Observe degraded state
 
-Within ~15 seconds (heartbeat timeout), the coordinator marks node-1 unhealthy.
-On the Grafana dashboard:
-- `NodeHealthStatus` for node-1 drops to 0 (red)
-- Fan-out partial response count increases
+There are two distinct windows to observe:
 
-Run a query against the coordinator to confirm `partial=true`:
+**Window A — transition (0–15s after kill):** node-1 is unreachable but not yet marked unhealthy.
+Fan-out still targets it and gets errors, so `partial=true`.
+
+Run a query immediately after the kill to catch this window:
 
 ```bash
 make load-test ADDR=localhost:9001 DURATION=5s MODE=query
 # partial: should be > 0%
+# Fan-Out Partial Total panel in Grafana should spike
+```
+
+**Window B — steady degraded state (after ~15s):** the coordinator marks node-1 unhealthy.
+Fan-out skips it entirely; `partial=false` but results come only from node-2 and node-3.
+
+On the Grafana dashboard after the transition:
+- `NodeHealthStatus` for node-1 drops to 0 (red)
+- Fan-out partial count returns to 0 (node is skipped, not failing)
+
+```bash
+make load-test ADDR=localhost:9001 DURATION=5s MODE=query
+# partial: should be 0.0% (node-1 is skipped, not targeted)
 ```
 
 ### 6. Restart node-1
@@ -63,9 +76,8 @@ docker compose -f deployments/docker-compose/docker-compose.yml start node-1
 Within ~5 seconds, node-1 re-registers and begins heartbeating.
 On the Grafana dashboard:
 - `NodeHealthStatus` for node-1 returns to 1 (green)
-- Partial response count returns to 0%
 
-Run another query to confirm full results:
+Run another query to confirm node-1 is back in the fan-out target set:
 
 ```bash
 make load-test ADDR=localhost:9001 DURATION=5s MODE=query
