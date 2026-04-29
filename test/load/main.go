@@ -17,7 +17,8 @@ import (
 )
 
 var (
-	addr     = flag.String("addr", "localhost:9001", "coordinator gRPC address")
+	addr     = flag.String("addr", "localhost:9001", "coordinator gRPC address (used for query)")
+	nodeAddr = flag.String("node-addr", "localhost:50051", "node gRPC address (used for ingest)")
 	workers  = flag.Int("workers", 10, "concurrent goroutines per mode")
 	duration = flag.Duration("duration", 30*time.Second, "test duration")
 	mode     = flag.String("mode", "both", `"ingest", "query", or "both"`)
@@ -26,14 +27,21 @@ var (
 func main() {
 	flag.Parse()
 
-	conn, err := grpc.NewClient(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Ingest goes to a storage node; query goes to the coordinator fan-out.
+	nodeConn, err := grpc.NewClient(*nodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		panic(fmt.Sprintf("dial %s: %v", *addr, err))
+		panic(fmt.Sprintf("dial node %s: %v", *nodeAddr, err))
 	}
-	defer conn.Close()
+	defer nodeConn.Close()
 
-	ingestClient := logengine.NewIngestServiceClient(conn)
-	queryClient := logengine.NewQueryServiceClient(conn)
+	coordConn, err := grpc.NewClient(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		panic(fmt.Sprintf("dial coordinator %s: %v", *addr, err))
+	}
+	defer coordConn.Close()
+
+	ingestClient := logengine.NewIngestServiceClient(nodeConn)
+	queryClient := logengine.NewQueryServiceClient(coordConn)
 
 	ctx, cancel := context.WithTimeout(context.Background(), *duration)
 	defer cancel()
