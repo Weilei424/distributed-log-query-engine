@@ -116,12 +116,12 @@ func main() {
 
 	go func() {
 		if err := grpcSrv.Serve(lis); err != nil {
-			log.Printf("grpc serve: %v", err)
+			coordLogger.Error("grpc serve error", zap.Error(err))
 		}
 	}()
 	go func() {
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("http serve: %v", err)
+			coordLogger.Error("http serve error", zap.Error(err))
 		}
 	}()
 	go metadata.StartLivenessChecker(ctx, r, fsm, heartbeatInterval, heartbeatTimeout, coordLogger)
@@ -141,10 +141,10 @@ func main() {
 	cancel()
 	grpcSrv.GracefulStop()
 	if err := httpSrv.Shutdown(context.Background()); err != nil {
-		log.Printf("http shutdown: %v", err)
+		coordLogger.Warn("http shutdown error", zap.Error(err))
 	}
 	if err := r.Shutdown().Error(); err != nil {
-		log.Printf("raft shutdown: %v", err)
+		coordLogger.Warn("raft shutdown error", zap.Error(err))
 	}
 	coordLogger.Info("coordinator stopped")
 }
