@@ -96,6 +96,7 @@ func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*log
 			zap.String("request_id", reqID),
 			zap.String("service", req.Entry.GetService()),
 			zap.Int("shard_id", shardID),
+			zap.Int("entry_count", 1),
 			zap.Int64("duration_ms", time.Since(start).Milliseconds()),
 		)
 	}
@@ -107,6 +108,7 @@ func (s *Server) IngestBatch(ctx context.Context, req *logengine.IngestBatchRequ
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
+	start := time.Now()
 	var accepted, rejected int32
 	for _, pb := range req.Entries {
 		_, err := s.Ingest(ctx, &logengine.IngestRequest{Entry: pb})
@@ -120,6 +122,13 @@ func (s *Server) IngestBatch(ctx context.Context, req *logengine.IngestBatchRequ
 			accepted++
 		}
 	}
+	s.logger.Info("ingest_batch",
+		zap.String("request_id", observability.RequestIDFromContext(ctx)),
+		zap.Int("entry_count", len(req.Entries)),
+		zap.Int32("accepted", accepted),
+		zap.Int32("rejected", rejected),
+		zap.Int64("duration_ms", time.Since(start).Milliseconds()),
+	)
 	return &logengine.IngestBatchResponse{Accepted: accepted, Rejected: rejected}, nil
 }
 
