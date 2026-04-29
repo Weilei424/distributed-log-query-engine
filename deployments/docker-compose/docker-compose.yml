@@ -63,6 +63,7 @@ services:
       - NODE_GRPC_ADDR=node-1:50051
       - DATA_DIR=/data
       - COORDINATOR_ADDRS=coordinator-1:9000,coordinator-2:9000,coordinator-3:9000
+      - TOTAL_SHARDS=16
       - METRICS_ADDR=:9090
     ports:
       - "50051:50051"
@@ -84,6 +85,7 @@ services:
       - NODE_GRPC_ADDR=node-2:50051
       - DATA_DIR=/data
       - COORDINATOR_ADDRS=coordinator-1:9000,coordinator-2:9000,coordinator-3:9000
+      - TOTAL_SHARDS=16
       - METRICS_ADDR=:9090
     ports:
       - "50052:50051"
@@ -105,6 +107,7 @@ services:
       - NODE_GRPC_ADDR=node-3:50051
       - DATA_DIR=/data
       - COORDINATOR_ADDRS=coordinator-1:9000,coordinator-2:9000,coordinator-3:9000
+      - TOTAL_SHARDS=16
       - METRICS_ADDR=:9090
     ports:
       - "50053:50051"
