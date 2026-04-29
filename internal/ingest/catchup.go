@@ -2,9 +2,9 @@ package ingest
 
 import (
 	"context"
-	"log"
 	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -17,7 +17,7 @@ import (
 // CatchUp fetches missing entries from the primary for each shard this node replicates.
 // Runs synchronously; skips silently if a primary is unreachable.
 // Returns the number of entries appended across all shards.
-func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata.ClusterState, manager *storage.Manager, idx *index.Index) int {
+func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata.ClusterState, manager *storage.Manager, idx *index.Index, logger *zap.Logger) int {
 	appended := 0
 	for shardID, sr := range state.Shards {
 		if sr.ReplicaNode != nodeID {
@@ -28,7 +28,10 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 			primaryAddr = n.Address
 		}
 		if primaryAddr == "" {
-			log.Printf("catch-up: shard %d primary address unknown, skipping", shardID)
+			logger.Warn("catch-up: primary address unknown, skipping",
+				zap.String("node_id", nodeID),
+				zap.Int("shard_id", shardID),
+			)
 			continue
 		}
 
@@ -40,7 +43,12 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 
 		conn, err := grpc.NewClient(primaryAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
-			log.Printf("catch-up: dial primary %s for shard %d: %v (skipping)", primaryAddr, shardID, err)
+			logger.Error("catch-up: dial primary failed, skipping shard",
+				zap.String("node_id", nodeID),
+				zap.Int("shard_id", shardID),
+				zap.String("primary_addr", primaryAddr),
+				zap.Error(err),
+			)
 			continue
 		}
 
@@ -53,7 +61,12 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 		conn.Close()
 
 		if err != nil {
-			log.Printf("catch-up: FetchShardEntries shard %d from %s: %v (skipping)", shardID, primaryAddr, err)
+			logger.Error("catch-up: FetchShardEntries failed, skipping shard",
+				zap.String("node_id", nodeID),
+				zap.Int("shard_id", shardID),
+				zap.String("primary_addr", primaryAddr),
+				zap.Error(err),
+			)
 			continue
 		}
 
@@ -64,13 +77,23 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 			e := ProtoToEntry(pb)
 			segPath, err := manager.AppendWithPath(e)
 			if err != nil {
-				log.Printf("catch-up: append entry %s: %v", e.ID, err)
+				logger.Error("catch-up: append entry failed",
+					zap.String("node_id", nodeID),
+					zap.Int("shard_id", shardID),
+					zap.String("entry_id", e.ID),
+					zap.Error(err),
+				)
 				continue
 			}
 			idx.Add(e, segPath)
 			appended++
 		}
-		log.Printf("catch-up: shard %d caught up %d entries from %s", shardID, len(resp.Entries), primaryAddr)
+		logger.Info("catch-up: shard caught up",
+			zap.String("node_id", nodeID),
+			zap.Int("shard_id", shardID),
+			zap.Int("entries_appended", appended),
+			zap.String("primary_addr", primaryAddr),
+		)
 	}
 	return appended
 }
