@@ -110,7 +110,7 @@ func TestPhase5_CatchUp_ReplicaFetchesMissedEntries(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
 
-	sc2 := cluster.NewStateCache(clusterClient2, 100*time.Millisecond)
+	sc2 := cluster.NewStateCache(clusterClient2, 100*time.Millisecond, zap.NewNop())
 	sc2.Refresh(ctx2)
 	go sc2.Run(ctx2)
 

@@ -94,7 +94,7 @@ func startPhase5Node(t *testing.T, nodeID string, coordAddr string, totalShards 
 	}
 	t.Logf("node %s registered: shards=%v addr=%s", nodeID, shards, addr)
 
-	stateCache := cluster.NewStateCache(clusterClient, 100*time.Millisecond)
+	stateCache := cluster.NewStateCache(clusterClient, 100*time.Millisecond, zap.NewNop())
 	stateCache.Refresh(ctx)
 	go stateCache.Run(ctx)
 
