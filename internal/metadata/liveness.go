@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/hashicorp/raft"
+	"go.uber.org/zap"
 
 	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 )
@@ -15,7 +15,7 @@ import (
 // StartLivenessChecker monitors node heartbeats and marks stale nodes unhealthy.
 // It only applies Raft commands when this coordinator is the leader.
 // Call as a goroutine; it exits when ctx is cancelled.
-func StartLivenessChecker(ctx context.Context, r *raft.Raft, fsm *FSM, interval, timeout time.Duration) {
+func StartLivenessChecker(ctx context.Context, r *raft.Raft, fsm *FSM, interval, timeout time.Duration, logger *zap.Logger) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -24,14 +24,14 @@ func StartLivenessChecker(ctx context.Context, r *raft.Raft, fsm *FSM, interval,
 			return
 		case <-ticker.C:
 			if r.State() == raft.Leader {
-				checkLiveness(r, fsm, timeout)
+				checkLiveness(r, fsm, timeout, logger)
 			}
 			emitNodeHealthMetrics(fsm)
 		}
 	}
 }
 
-func checkLiveness(r *raft.Raft, fsm *FSM, timeout time.Duration) {
+func checkLiveness(r *raft.Raft, fsm *FSM, timeout time.Duration, logger *zap.Logger) {
 	state := fsm.State()
 	now := time.Now().UnixNano()
 	timeoutNs := timeout.Nanoseconds()
@@ -41,9 +41,15 @@ func checkLiveness(r *raft.Raft, fsm *FSM, timeout time.Duration) {
 		}
 		if now-node.LastSeen > timeoutNs {
 			if err := applyMarkUnhealthy(r, node.ID); err != nil {
-				log.Printf("liveness: failed to mark %s unhealthy: %v", node.ID, err)
+				logger.Error("liveness: failed to mark node unhealthy",
+					zap.String("node_id", node.ID),
+					zap.Error(err),
+				)
 			} else {
-				log.Printf("liveness: marked %s unhealthy (last seen %.1fs ago)", node.ID, float64(now-node.LastSeen)/1e9)
+				logger.Info("liveness: marked node unhealthy",
+					zap.String("node_id", node.ID),
+					zap.Float64("last_seen_seconds_ago", float64(now-node.LastSeen)/1e9),
+				)
 			}
 		}
 	}
