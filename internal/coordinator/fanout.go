@@ -46,6 +46,7 @@ func NewFanOutExecutor(state ClusterStateProvider, nodeTimeoutMs int64, fanOutLi
 // The result's Partial field is true if any node failed to respond.
 func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryRequest) (*types.QueryResult, error) {
 	start := time.Now()
+	fanOutReqID := observability.NewRequestID()
 	defer func() {
 		observability.QueryDuration.WithLabelValues("coordinator", "fanout").Observe(time.Since(start).Seconds())
 	}()
@@ -96,6 +97,7 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 			defer wg.Done()
 			nodeCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
+			nodeCtx = observability.OutgoingContextWithRequestID(nodeCtx, fanOutReqID)
 
 			client, err := e.pool.get(t.addr)
 			if err != nil {
