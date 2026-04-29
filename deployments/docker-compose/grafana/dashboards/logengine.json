@@ -131,6 +131,19 @@
           "legendFormat": "{{target_addr}}"
         }
       ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Fan-Out Partial Responses (rate/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(logengine_fanout_partial_total[1m])",
+          "legendFormat": "partial/s"
+        }
+      ]
     }
   ]
 }
