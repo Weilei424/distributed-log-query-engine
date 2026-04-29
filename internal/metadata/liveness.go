@@ -42,12 +42,12 @@ func checkLiveness(r *raft.Raft, fsm *FSM, timeout time.Duration, logger *zap.Lo
 		if now-node.LastSeen > timeoutNs {
 			if err := applyMarkUnhealthy(r, node.ID); err != nil {
 				logger.Error("liveness: failed to mark node unhealthy",
-					zap.String("node_id", node.ID),
+					zap.String("target_node_id", node.ID),
 					zap.Error(err),
 				)
 			} else {
 				logger.Info("liveness: marked node unhealthy",
-					zap.String("node_id", node.ID),
+					zap.String("target_node_id", node.ID),
 					zap.Float64("last_seen_seconds_ago", float64(now-node.LastSeen)/1e9),
 				)
 			}
