@@ -99,7 +99,7 @@ func main() {
 				if catchUpState, err := clusterClient.GetClusterState(ctx); err != nil {
 					log.Printf("catch-up: get cluster state failed: %v (skipping)", err)
 				} else {
-					ingest.CatchUp(ctx, nodeID, totalShards, catchUpState, manager, idx)
+					ingest.CatchUp(ctx, nodeID, totalShards, catchUpState, manager, idx, nodeLogger)
 				}
 
 				// Build orchestrator.
