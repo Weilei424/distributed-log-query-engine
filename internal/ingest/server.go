@@ -67,8 +67,11 @@ func (s *Server) SetLogger(l *zap.Logger) { s.logger = l }
 func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*logengine.IngestResponse, error) {
 	start := time.Now()
 
-	// Reuse request ID from the caller when this is a forwarded hop.
+	// Priority: gRPC metadata (forwarded hop) > Go context value (IngestBatch) > new ID.
 	reqID := observability.RequestIDFromIncomingContext(ctx)
+	if reqID == "" {
+		reqID = observability.RequestIDFromContext(ctx)
+	}
 	if reqID == "" {
 		reqID = observability.NewRequestID()
 	}
@@ -109,6 +112,8 @@ func (s *Server) IngestBatch(ctx context.Context, req *logengine.IngestBatchRequ
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	start := time.Now()
+	batchReqID := observability.NewRequestID()
+	ctx = observability.WithRequestID(ctx, batchReqID)
 	var accepted, rejected int32
 	for _, pb := range req.Entries {
 		_, err := s.Ingest(ctx, &logengine.IngestRequest{Entry: pb})
@@ -123,7 +128,7 @@ func (s *Server) IngestBatch(ctx context.Context, req *logengine.IngestBatchRequ
 		}
 	}
 	s.logger.Info("ingest_batch",
-		zap.String("request_id", observability.RequestIDFromContext(ctx)),
+		zap.String("request_id", batchReqID),
 		zap.Int("entry_count", len(req.Entries)),
 		zap.Int32("accepted", accepted),
 		zap.Int32("rejected", rejected),
