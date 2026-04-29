@@ -107,7 +107,7 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 			if err != nil {
 				e.logger.Warn("fanout node error",
 					zap.String("request_id", fanOutReqID),
-					zap.String("node_id", t.id),
+					zap.String("target_node_id", t.id),
 					zap.Error(err),
 				)
 				ch <- nodeResult{nodeID: t.id, err: err}
@@ -120,12 +120,12 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 					observability.FanOutTimeoutsTotal.Inc()
 					e.logger.Warn("fanout node timeout",
 						zap.String("request_id", fanOutReqID),
-						zap.String("node_id", t.id),
+						zap.String("target_node_id", t.id),
 					)
 				} else {
 					e.logger.Warn("fanout node error",
 						zap.String("request_id", fanOutReqID),
-						zap.String("node_id", t.id),
+						zap.String("target_node_id", t.id),
 						zap.Error(err),
 					)
 				}
@@ -147,7 +147,7 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 			}
 			e.logger.Info("fanout node responded",
 				zap.String("request_id", fanOutReqID),
-				zap.String("node_id", t.id),
+				zap.String("target_node_id", t.id),
 				zap.Int("entries", len(entries)),
 			)
 			ch <- nodeResult{nodeID: t.id, entries: entries, total: resp.Total}
