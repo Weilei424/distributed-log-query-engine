@@ -65,7 +65,11 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 	for i, t := range targets {
 		ids[i] = t.id + "=" + t.addr
 	}
-	e.logger.Info("fanout targeting nodes", zap.Int("count", len(targets)), zap.Strings("nodes", ids))
+	e.logger.Info("fanout targeting nodes",
+		zap.String("request_id", fanOutReqID),
+		zap.Int("count", len(targets)),
+		zap.Strings("nodes", ids),
+	)
 
 	// Resolve the effective client limit before computing the per-node limit
 	// so the default (100) is included in the candidate window calculation.
@@ -101,7 +105,11 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 
 			client, err := e.pool.get(t.addr)
 			if err != nil {
-				e.logger.Warn("fanout node error", zap.String("node_id", t.id), zap.Error(err))
+				e.logger.Warn("fanout node error",
+					zap.String("request_id", fanOutReqID),
+					zap.String("node_id", t.id),
+					zap.Error(err),
+				)
 				ch <- nodeResult{nodeID: t.id, err: err}
 				return
 			}
@@ -110,9 +118,16 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 			if err != nil {
 				if nodeCtx.Err() != nil {
 					observability.FanOutTimeoutsTotal.Inc()
-					e.logger.Warn("fanout node timeout", zap.String("node_id", t.id))
+					e.logger.Warn("fanout node timeout",
+						zap.String("request_id", fanOutReqID),
+						zap.String("node_id", t.id),
+					)
 				} else {
-					e.logger.Warn("fanout node error", zap.String("node_id", t.id), zap.Error(err))
+					e.logger.Warn("fanout node error",
+						zap.String("request_id", fanOutReqID),
+						zap.String("node_id", t.id),
+						zap.Error(err),
+					)
 				}
 				ch <- nodeResult{nodeID: t.id, err: err}
 				return
@@ -130,7 +145,11 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 					Fields:     pb.Fields,
 				}
 			}
-			e.logger.Info("fanout node responded", zap.String("node_id", t.id), zap.Int("entries", len(entries)))
+			e.logger.Info("fanout node responded",
+				zap.String("request_id", fanOutReqID),
+				zap.String("node_id", t.id),
+				zap.Int("entries", len(entries)),
+			)
 			ch <- nodeResult{nodeID: t.id, entries: entries, total: resp.Total}
 		}()
 	}
@@ -155,6 +174,7 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 		observability.FanOutPartialTotal.Inc()
 	}
 	e.logger.Info("fanout complete",
+		zap.String("request_id", fanOutReqID),
 		zap.Int64("merge_ms", time.Since(mergeStart).Milliseconds()),
 		zap.Int32("total", out.total),
 		zap.Bool("partial", out.partial),
