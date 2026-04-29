@@ -85,19 +85,19 @@ func main() {
 				// Registration failed — start in local-only mode with no cluster membership.
 				// The node will NOT heartbeat and will NOT appear healthy in cluster metadata.
 				// Restart the node once the coordinator is reachable to enable distributed mode.
-				log.Printf("cluster register: %v (starting in local-only mode; restart required to join cluster)", err)
+				nodeLogger.Error("cluster register failed; starting in local-only mode (restart required to join cluster)", zap.Error(err))
 				ingestSrv = ingest.NewLocalServer(manager, idx)
 			} else {
 				nodeLogger.Info("registered with coordinator", zap.Ints("shards", shards))
 
 				// Start state cache (initial refresh before accepting traffic).
-				stateCache := cluster.NewStateCache(clusterClient, 5*time.Second)
+				stateCache := cluster.NewStateCache(clusterClient, 5*time.Second, nodeLogger)
 				stateCache.Refresh(ctx)
 				go stateCache.Run(ctx)
 
 				// Run catch-up for shards this node owns as replica.
 				if catchUpState, err := clusterClient.GetClusterState(ctx); err != nil {
-					log.Printf("catch-up: get cluster state failed: %v (skipping)", err)
+					nodeLogger.Error("catch-up: get cluster state failed, skipping catch-up", zap.Error(err))
 				} else {
 					ingest.CatchUp(ctx, nodeID, totalShards, catchUpState, manager, idx, nodeLogger)
 				}
