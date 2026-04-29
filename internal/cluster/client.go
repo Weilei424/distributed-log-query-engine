@@ -69,8 +69,8 @@ func (c *ClusterClient) advanceAndReconnect() error {
 }
 
 // Register calls RegisterNode on the coordinator cluster.
-// It retries until ctx expires, rotating across coordinators on FAILED_PRECONDITION
-// (not leader) and backing off on UNAVAILABLE (election in progress).
+// It retries until ctx expires, rotating across coordinators on both FAILED_PRECONDITION
+// (not leader) and UNAVAILABLE (coordinator not ready or down).
 func (c *ClusterClient) Register(ctx context.Context, grpcAddr string) ([]int, error) {
 	for {
 		resp, err := c.client.RegisterNode(ctx, &logengine.RegisterNodeRequest{
@@ -97,7 +97,10 @@ func (c *ClusterClient) Register(ctx context.Context, grpcAddr string) ([]int, e
 				return nil, fmt.Errorf("register: %w", ctx.Err())
 			}
 		case codes.Unavailable:
-			// Cluster may be in election; back off and retry same address.
+			// Coordinator is unreachable (not ready or down); rotate to next and back off.
+			if reconErr := c.advanceAndReconnect(); reconErr != nil {
+				return nil, reconErr
+			}
 			select {
 			case <-time.After(500 * time.Millisecond):
 			case <-ctx.Done():
