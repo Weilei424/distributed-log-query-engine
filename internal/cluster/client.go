@@ -69,9 +69,10 @@ func (c *ClusterClient) advanceAndReconnect() error {
 }
 
 // Register calls RegisterNode on the coordinator cluster.
-// It retries across coordinators on FAILED_PRECONDITION (not leader).
+// It retries until ctx expires, rotating across coordinators on FAILED_PRECONDITION
+// (not leader) and backing off on UNAVAILABLE (election in progress).
 func (c *ClusterClient) Register(ctx context.Context, grpcAddr string) ([]int, error) {
-	for attempt := 0; attempt < len(c.addrs)*3; attempt++ {
+	for {
 		resp, err := c.client.RegisterNode(ctx, &logengine.RegisterNodeRequest{
 			NodeId:      c.nodeID,
 			GrpcAddress: grpcAddr,
@@ -86,18 +87,26 @@ func (c *ClusterClient) Register(ctx context.Context, grpcAddr string) ([]int, e
 		st, _ := status.FromError(err)
 		switch st.Code() {
 		case codes.FailedPrecondition:
-			// This coordinator is not the leader; try the next one.
+			// This coordinator is not the leader; rotate to next and wait for election.
 			if reconErr := c.advanceAndReconnect(); reconErr != nil {
 				return nil, reconErr
 			}
+			select {
+			case <-time.After(500 * time.Millisecond):
+			case <-ctx.Done():
+				return nil, fmt.Errorf("register: %w", ctx.Err())
+			}
 		case codes.Unavailable:
 			// Cluster may be in election; back off and retry same address.
-			time.Sleep(500 * time.Millisecond)
+			select {
+			case <-time.After(500 * time.Millisecond):
+			case <-ctx.Done():
+				return nil, fmt.Errorf("register: %w", ctx.Err())
+			}
 		default:
 			return nil, err
 		}
 	}
-	return nil, fmt.Errorf("register failed after retries: no reachable leader")
 }
 
 // SendHeartbeat sends a heartbeat to the coordinator leader.
