@@ -55,7 +55,7 @@ func (r *Replicator) Enqueue(entry *types.LogEntry, shardID int, addr string) {
 	ch := r.getOrCreateChannel(addr)
 	select {
 	case ch <- replicaJob{entry: entry, shardID: shardID}:
-		observability.ReplicationLagEntries.WithLabelValues(r.nodeID).Set(float64(len(ch)))
+		observability.ReplicationLagEntries.WithLabelValues(addr).Set(float64(len(ch)))
 	default:
 		r.logger.Warn("replication channel full, dropping entry",
 			zap.String("addr", addr),
@@ -98,12 +98,15 @@ func (r *Replicator) drain(addr string, ch chan replicaJob) {
 					ctx, cancel := context.WithDeadline(context.Background(), deadline)
 					r.send(ctx, client, job)
 					cancel()
+					observability.ReplicationLagEntries.WithLabelValues(addr).Set(float64(len(ch)))
 				default:
+					observability.ReplicationLagEntries.WithLabelValues(addr).Set(0)
 					return
 				}
 			}
 		case job := <-ch:
 			r.send(r.ctx, client, job)
+			observability.ReplicationLagEntries.WithLabelValues(addr).Set(float64(len(ch)))
 		}
 	}
 }
