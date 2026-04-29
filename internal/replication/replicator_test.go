@@ -48,7 +48,7 @@ func TestReplicator_DeliverEntry(t *testing.T) {
 	t.Cleanup(r.Stop)
 
 	entry := &types.LogEntry{ID: "e1", Service: "auth", Message: "hello"}
-	r.Enqueue(entry, 0, addr)
+	r.Enqueue(entry, 0, addr, "test-req-id")
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -72,7 +72,7 @@ func TestReplicator_EnqueueNonBlocking(t *testing.T) {
 		defer close(done)
 		// Fill beyond capacity to trigger the drop path.
 		for i := 0; i < 300; i++ {
-			r.Enqueue(entry, 0, "localhost:19999")
+			r.Enqueue(entry, 0, "localhost:19999", "test-req-id")
 		}
 	}()
 	select {
@@ -88,7 +88,7 @@ func TestReplicator_StopsCleanly(t *testing.T) {
 	r := replication.NewReplicator(4, "test-node", zap.NewNop())
 
 	entry := &types.LogEntry{ID: "e1", Service: "auth", Message: "hello"}
-	r.Enqueue(entry, 0, addr)
+	r.Enqueue(entry, 0, addr, "test-req-id")
 
 	done := make(chan struct{})
 	go func() {
