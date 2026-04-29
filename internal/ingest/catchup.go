@@ -70,6 +70,7 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 			continue
 		}
 
+		shardAppended := 0
 		for _, pb := range resp.Entries {
 			if knownIDs[pb.Id] {
 				continue
@@ -86,12 +87,13 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 				continue
 			}
 			idx.Add(e, segPath)
+			shardAppended++
 			appended++
 		}
 		logger.Info("catch-up: shard caught up",
 			zap.String("node_id", nodeID),
 			zap.Int("shard_id", shardID),
-			zap.Int("entries_appended", appended),
+			zap.Int("entries_appended", shardAppended),
 			zap.String("primary_addr", primaryAddr),
 		)
 	}
