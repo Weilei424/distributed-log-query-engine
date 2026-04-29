@@ -96,7 +96,7 @@ func TestPhase5_CatchUp_ReplicaFetchesMissedEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetClusterState for catch-up: %v", err)
 	}
-	appended := ingest.CatchUp(context.Background(), "node-b", totalShards, catchUpState, m2, idx2)
+	appended := ingest.CatchUp(context.Background(), "node-b", totalShards, catchUpState, m2, idx2, zap.NewNop())
 	if appended != 3 {
 		t.Errorf("CatchUp: expected 3 entries appended, got %d", appended)
 	}
