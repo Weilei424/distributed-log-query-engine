@@ -72,7 +72,7 @@ func main() {
 		addrs := cluster.ParseAddrs(coordinatorAddrs)
 		clusterClient, err := cluster.NewClusterClient(addrs, nodeID)
 		if err != nil {
-			log.Printf("cluster client init: %v (starting in local mode)", err)
+			nodeLogger.Warn("cluster client init failed, starting in local mode", zap.Error(err))
 			ingestSrv = ingest.NewLocalServer(manager, idx)
 		} else {
 			defer clusterClient.Close()
