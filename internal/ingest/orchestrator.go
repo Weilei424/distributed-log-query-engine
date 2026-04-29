@@ -124,7 +124,7 @@ func (o *Orchestrator) writeLocal(ctx context.Context, pb *logengine.LogEntry, r
 			if o.totalShards > 0 {
 				shardID = ShardID(entry.Service, o.totalShards)
 			}
-			o.replicator.Enqueue(entry, shardID, replicaAddr)
+			o.replicator.Enqueue(entry, shardID, replicaAddr, observability.RequestIDFromContext(ctx))
 		}
 	}
 
