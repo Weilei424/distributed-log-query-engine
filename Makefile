@@ -24,10 +24,11 @@ proto:
 proto-lint:
 	buf lint proto
 
-## load-test: run load test against a live cluster (ADDR, DURATION, MODE are optional)
+## load-test: run load test against a live cluster (ADDR=coordinator, NODE_ADDR=node, DURATION, MODE are optional)
 load-test:
 	go run ./test/load \
 		-addr=$(or $(ADDR),localhost:9001) \
+		-node-addr=$(or $(NODE_ADDR),localhost:50051) \
 		-duration=$(or $(DURATION),30s) \
 		-mode=$(or $(MODE),both)
 
