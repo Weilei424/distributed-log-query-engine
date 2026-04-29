@@ -45,7 +45,7 @@ Metrics defined:
 
 | Variable | Type | Labels | Purpose |
 |---|---|---|---|
-| `IngestRequestsTotal` | CounterVec | `node_id`, `status` | ingestion rate + failure count |
+| `IngestRequestsTotal` | CounterVec | `node_id`, `status`, `source` | ingestion rate + failure count |
 | `AppendDuration` | HistogramVec | `node_id` | append latency; buckets: 1ms–2s |
 | `ActiveSegmentBytes` | GaugeVec | `node_id` | active segment file size |
 | `MountedSegmentsTotal` | GaugeVec | `node_id` | number of open segments |
@@ -54,10 +54,11 @@ Metrics defined:
 | `FanOutTimeoutsTotal` | Counter | — | per-node fan-out timeouts |
 | `FanOutPartialTotal` | Counter | — | partial fan-out responses returned |
 | `NodeHealthStatus` | GaugeVec | `node_id` | 1 = healthy, 0 = unhealthy |
-| `ReplicationLagEntries` | GaugeVec | `node_id` | entries pending replication |
+| `ReplicationLagEntries` | GaugeVec | `target_addr` | entries pending replication |
 
 `type` label on `QueryDuration` takes values `"local"` or `"fanout"`.
 `status` label on `IngestRequestsTotal` takes values `"ok"` or `"error"`.
+`source` label on `IngestRequestsTotal` takes values `"client"` (first-hop from external caller) or `"forwarded"` (internal hop from a non-primary node).
 
 ### `internal/observability/logger.go`
 
@@ -134,7 +135,7 @@ No architectural changes — metric updates and log replacements added at call s
 
 ### `internal/replication/replicator.go`
 
-- Set `ReplicationLagEntries{node_id}` to buffered channel length after each send
+- Set `ReplicationLagEntries{target_addr}` to buffered channel length after each send
 
 ---
 
