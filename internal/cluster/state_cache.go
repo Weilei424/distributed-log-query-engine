@@ -3,9 +3,10 @@ package cluster
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/Weilei424/distributed-log-query-engine/internal/metadata"
 )
@@ -29,13 +30,15 @@ type StateCache struct {
 	state    metadata.ClusterState
 	client   *ClusterClient
 	interval time.Duration
+	logger   *zap.Logger
 }
 
 // NewStateCache creates a StateCache backed by the given ClusterClient.
-func NewStateCache(client *ClusterClient, interval time.Duration) *StateCache {
+func NewStateCache(client *ClusterClient, interval time.Duration, logger *zap.Logger) *StateCache {
 	return &StateCache{
 		client:   client,
 		interval: interval,
+		logger:   logger,
 		state: metadata.ClusterState{
 			Nodes:  make(map[string]metadata.NodeRecord),
 			Shards: make(map[int]metadata.ShardRecord),
@@ -68,7 +71,7 @@ func (c *StateCache) refresh(ctx context.Context) {
 	defer cancel()
 	state, err := c.client.GetClusterState(rctx)
 	if err != nil {
-		log.Printf("state_cache: refresh failed: %v (retaining last known state)", err)
+		c.logger.Warn("state_cache: refresh failed, retaining last known state", zap.Error(err))
 		return
 	}
 	c.mu.Lock()
