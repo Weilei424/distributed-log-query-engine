@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/hashicorp/raft"
+
+	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 )
 
 // StartLivenessChecker monitors node heartbeats and marks stale nodes unhealthy.
@@ -21,6 +23,7 @@ func StartLivenessChecker(ctx context.Context, r *raft.Raft, fsm *FSM, interval,
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			emitNodeHealthMetrics(fsm)
 			if r.State() != raft.Leader {
 				continue
 			}
@@ -44,6 +47,19 @@ func checkLiveness(r *raft.Raft, fsm *FSM, timeout time.Duration) {
 				log.Printf("liveness: marked %s unhealthy (last seen %.1fs ago)", node.ID, float64(now-node.LastSeen)/1e9)
 			}
 		}
+	}
+}
+
+// emitNodeHealthMetrics publishes NodeHealthStatus for every node the FSM knows about.
+// Runs on every coordinator (not just the leader) so the metrics endpoint reflects
+// cluster health even when a node's own metrics endpoint has disappeared.
+func emitNodeHealthMetrics(fsm *FSM) {
+	for _, node := range fsm.State().Nodes {
+		val := float64(0)
+		if node.Status == NodeHealthy {
+			val = 1
+		}
+		observability.NodeHealthStatus.WithLabelValues(node.ID).Set(val)
 	}
 }
 
