@@ -1,6 +1,10 @@
+# imagePullPolicy defaults to IfNotPresent so locally loaded images (kind load
+# docker-image / minikube image load) are used without a registry pull.
+# Override to Always when deploying from a remote registry.
 coordinator:
   replicas: 3
   image: logengine-coordinator:latest
+  imagePullPolicy: IfNotPresent
   grpcPort: 9000
   httpPort: 8080
   totalShards: 16
@@ -9,6 +13,7 @@ coordinator:
 node:
   replicas: 3
   image: logengine-node:latest
+  imagePullPolicy: IfNotPresent
   grpcPort: 50051
   metricsPort: 9090
   storageSize: 1Gi
