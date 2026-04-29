@@ -39,6 +39,8 @@ spec:
           value: /data
         - name: COORDINATOR_ADDRS
           value: {{ include "logengine.coordinatorAddrs" . | quote }}
+        - name: TOTAL_SHARDS
+          value: "{{ .Values.coordinator.totalShards }}"
         - name: METRICS_ADDR
           value: ":{{ .Values.node.metricsPort }}"
         - name: MAX_SEGMENT_BYTES
