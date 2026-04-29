@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -17,7 +18,10 @@ import (
 
 // ClusterClient connects a storage node to the coordinator cluster.
 // It maintains a list of coordinator addresses and round-robins on non-leader responses.
+// All mutable fields are guarded by mu so heartbeat and state-cache goroutines can
+// share the same instance safely.
 type ClusterClient struct {
+	mu     sync.Mutex
 	addrs  []string
 	idx    int
 	conn   *grpc.ClientConn
@@ -50,6 +54,7 @@ func ParseAddrs(s string) []string {
 	return result
 }
 
+// connectTo replaces the current connection. Caller must hold c.mu.
 func (c *ClusterClient) connectTo(addr string) error {
 	if c.conn != nil {
 		c.conn.Close()
@@ -64,8 +69,19 @@ func (c *ClusterClient) connectTo(addr string) error {
 }
 
 func (c *ClusterClient) advanceAndReconnect() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.idx = (c.idx + 1) % len(c.addrs)
 	return c.connectTo(c.addrs[c.idx])
+}
+
+// currentClient returns the active gRPC client under the lock.
+// Callers must use the returned value for a single RPC; they must not cache it
+// across calls, as advanceAndReconnect may replace it concurrently.
+func (c *ClusterClient) currentClient() logengine.ClusterServiceClient {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.client
 }
 
 // Register calls RegisterNode on the coordinator cluster.
@@ -73,7 +89,7 @@ func (c *ClusterClient) advanceAndReconnect() error {
 // (not leader) and UNAVAILABLE (coordinator not ready or down).
 func (c *ClusterClient) Register(ctx context.Context, grpcAddr string) ([]int, error) {
 	for {
-		resp, err := c.client.RegisterNode(ctx, &logengine.RegisterNodeRequest{
+		resp, err := c.currentClient().RegisterNode(ctx, &logengine.RegisterNodeRequest{
 			NodeId:      c.nodeID,
 			GrpcAddress: grpcAddr,
 		})
@@ -118,7 +134,7 @@ func (c *ClusterClient) Register(ctx context.Context, grpcAddr string) ([]int, e
 // leave the node stranded on a dead coordinator indefinitely.
 func (c *ClusterClient) SendHeartbeat(ctx context.Context) error {
 	for attempt := 0; attempt < len(c.addrs)*2; attempt++ {
-		_, err := c.client.Heartbeat(ctx, &logengine.HeartbeatRequest{NodeId: c.nodeID})
+		_, err := c.currentClient().Heartbeat(ctx, &logengine.HeartbeatRequest{NodeId: c.nodeID})
 		if err == nil {
 			return nil
 		}
@@ -147,7 +163,7 @@ func (c *ClusterClient) SendHeartbeat(ctx context.Context) error {
 // GetClusterState fetches the current cluster state from the coordinator.
 // Any coordinator can serve this request (no leader routing needed).
 func (c *ClusterClient) GetClusterState(ctx context.Context) (metadata.ClusterState, error) {
-	resp, err := c.client.GetClusterState(ctx, &logengine.GetClusterStateRequest{})
+	resp, err := c.currentClient().GetClusterState(ctx, &logengine.GetClusterStateRequest{})
 	if err != nil {
 		return metadata.ClusterState{}, err
 	}
@@ -182,6 +198,8 @@ func protoToClusterState(resp *logengine.GetClusterStateResponse) metadata.Clust
 
 // Close closes the underlying gRPC connection.
 func (c *ClusterClient) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.conn != nil {
 		return c.conn.Close()
 	}
