@@ -17,6 +17,7 @@ spec:
       containers:
       - name: node
         image: {{ .Values.node.image }}
+        imagePullPolicy: {{ .Values.node.imagePullPolicy }}
         ports:
         - containerPort: {{ .Values.node.grpcPort }}
           name: grpc
