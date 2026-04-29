@@ -124,7 +124,7 @@ func main() {
 			log.Printf("http serve: %v", err)
 		}
 	}()
-	go metadata.StartLivenessChecker(ctx, r, fsm, heartbeatInterval, heartbeatTimeout)
+	go metadata.StartLivenessChecker(ctx, r, fsm, heartbeatInterval, heartbeatTimeout, coordLogger)
 
 	coordLogger.Info("coordinator started",
 		zap.String("raft_addr", bindAddr),
