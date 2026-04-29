@@ -6,7 +6,7 @@ var (
 	IngestRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "logengine_ingest_requests_total",
 		Help: "Total log entries processed by the ingest server.",
-	}, []string{"node_id", "status"})
+	}, []string{"node_id", "status", "source"})
 
 	AppendDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "logengine_append_duration_seconds",
@@ -53,7 +53,7 @@ var (
 	ReplicationLagEntries = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "logengine_replication_lag_entries",
 		Help: "Number of entries pending replication per target address.",
-	}, []string{"node_id"})
+	}, []string{"target_addr"})
 )
 
 // Register wires all metrics into reg. Call once at process startup.
