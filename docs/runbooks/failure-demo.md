@@ -58,7 +58,7 @@ Fan-out skips it entirely; `partial=false` but results come only from node-2 and
 
 On the Grafana dashboard after the transition:
 - `NodeHealthStatus` for node-1 drops to 0 (red)
-- Fan-out partial count returns to 0 (node is skipped, not failing)
+- Fan-out partial response rate returns to 0 (node is skipped, not failing)
 
 ```bash
 make load-test ADDR=localhost:9001 DURATION=5s MODE=query
