@@ -64,8 +64,17 @@ func (s *Server) SetLogger(l *zap.Logger) { s.logger = l }
 
 // Ingest delegates to the orchestrator for routing and local write.
 func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*logengine.IngestResponse, error) {
-	reqID := observability.NewRequestID()
+	// Reuse request ID from the caller when this is a forwarded hop.
+	reqID := observability.RequestIDFromIncomingContext(ctx)
+	if reqID == "" {
+		reqID = observability.NewRequestID()
+	}
 	ctx = observability.WithRequestID(ctx, reqID)
+
+	source := "client"
+	if observability.IsForwardedFromIncomingContext(ctx) {
+		source = "forwarded"
+	}
 
 	resp, err := s.orchestrator.HandleIngest(ctx, req)
 
@@ -73,7 +82,7 @@ func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*log
 	if err != nil {
 		reqStatus = "error"
 	}
-	observability.IngestRequestsTotal.WithLabelValues(s.nodeID, reqStatus).Inc()
+	observability.IngestRequestsTotal.WithLabelValues(s.nodeID, reqStatus, source).Inc()
 
 	if err == nil {
 		s.logger.Info("ingest",
