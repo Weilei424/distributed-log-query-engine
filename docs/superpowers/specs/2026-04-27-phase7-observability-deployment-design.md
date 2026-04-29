@@ -103,7 +103,7 @@ No architectural changes — metric updates and log replacements added at call s
 
 - Generate `request_id` at start of each `Ingest` / `IngestBatch` handler call
 - Attach to context with `observability.WithRequestID`
-- Increment `IngestRequestsTotal{node_id, status}` per entry processed
+- Increment `IngestRequestsTotal{node_id, status, source}` per entry processed (`source` is `"client"` or `"forwarded"`)
 - Observe `AppendDuration{node_id}` around `storage.Manager.Append`
 - Log each ingest: `request_id`, `shard_id`, `service`, entry count, duration
 
@@ -187,8 +187,9 @@ Dashboard panels:
 - Local query latency p50/p95
 - Fan-out latency p50/p95
 - Active segment size per node
-- Node health status (stat panel, green/red)
-- Replication lag per node
+- Node health status (stat panel, green/red; uses `min by (node_id)` to aggregate coordinator and node series)
+- Replication lag per target address
+- Fan-out partial response rate
 
 ### `make run-local`
 
