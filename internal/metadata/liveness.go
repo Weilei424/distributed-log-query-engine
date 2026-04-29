@@ -23,11 +23,10 @@ func StartLivenessChecker(ctx context.Context, r *raft.Raft, fsm *FSM, interval,
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			emitNodeHealthMetrics(fsm)
-			if r.State() != raft.Leader {
-				continue
+			if r.State() == raft.Leader {
+				checkLiveness(r, fsm, timeout)
 			}
-			checkLiveness(r, fsm, timeout)
+			emitNodeHealthMetrics(fsm)
 		}
 	}
 }
