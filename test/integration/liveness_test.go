@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/Weilei424/distributed-log-query-engine/internal/metadata"
 )
 
@@ -27,6 +29,7 @@ func TestLiveness_NodeMarkedUnhealthyAfterMissedHeartbeats(t *testing.T) {
 	go metadata.StartLivenessChecker(livenessCtx, coord.r, coord.fsm,
 		50*time.Millisecond,  // check interval
 		200*time.Millisecond, // unhealthy threshold
+		zap.NewNop(),
 	)
 
 	// Wait for node-1 to be marked unhealthy.
