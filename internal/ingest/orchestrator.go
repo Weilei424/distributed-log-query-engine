@@ -140,6 +140,12 @@ func (o *Orchestrator) forward(ctx context.Context, req *logengine.IngestRequest
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "connect to primary %s: %v", addr, err)
 	}
+	// Propagate the trace ID and mark as a forwarded hop so the primary
+	// logs the same request ID and records the correct metric source.
+	if id := observability.RequestIDFromContext(ctx); id != "" {
+		ctx = observability.OutgoingContextWithRequestID(ctx, id)
+	}
+	ctx = observability.OutgoingContextWithForwarded(ctx)
 	return client.Ingest(ctx, req)
 }
 
