@@ -31,6 +31,14 @@ func NewQueryServer(executor *LocalExecutor, nodeID string, logger *zap.Logger) 
 func (s *QueryServer) Query(ctx context.Context, req *logengine.QueryRequest) (*logengine.QueryResponse, error) {
 	start := time.Now()
 
+	// Propagate request ID from gRPC metadata (set by coordinator fan-out) into
+	// context so log lines on this node share the same trace ID as the coordinator.
+	reqID := observability.RequestIDFromIncomingContext(ctx)
+	if reqID == "" {
+		reqID = observability.NewRequestID()
+	}
+	ctx = observability.WithRequestID(ctx, reqID)
+
 	if req.Limit < 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "limit must be non-negative")
 	}
@@ -48,12 +56,16 @@ func (s *QueryServer) Query(ctx context.Context, req *logengine.QueryRequest) (*
 	}
 
 	result, err := s.executor.Execute(ctx, typesReq)
+	durationMs := time.Since(start).Milliseconds()
 	observability.QueryDuration.WithLabelValues(s.nodeID, "local").Observe(time.Since(start).Seconds())
 	if err == nil {
 		s.logger.Info("query",
-			zap.String("request_id", observability.RequestIDFromContext(ctx)),
+			zap.String("request_id", reqID),
 			zap.String("keyword", req.Keyword),
+			zap.Int64("start_time", req.StartTime),
+			zap.Int64("end_time", req.EndTime),
 			zap.Int("results", len(result.Entries)),
+			zap.Int64("duration_ms", durationMs),
 		)
 	}
 	if err != nil {
