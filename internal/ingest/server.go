@@ -4,6 +4,7 @@ package ingest
 import (
 	"context"
 	"sort"
+	"time"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -64,6 +65,8 @@ func (s *Server) SetLogger(l *zap.Logger) { s.logger = l }
 
 // Ingest delegates to the orchestrator for routing and local write.
 func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*logengine.IngestResponse, error) {
+	start := time.Now()
+
 	// Reuse request ID from the caller when this is a forwarded hop.
 	reqID := observability.RequestIDFromIncomingContext(ctx)
 	if reqID == "" {
@@ -85,9 +88,15 @@ func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*log
 	observability.IngestRequestsTotal.WithLabelValues(s.nodeID, reqStatus, source).Inc()
 
 	if err == nil {
+		shardID := -1
+		if s.totalShards > 0 && req.Entry != nil {
+			shardID = ShardID(req.Entry.GetService(), s.totalShards)
+		}
 		s.logger.Info("ingest",
 			zap.String("request_id", reqID),
 			zap.String("service", req.Entry.GetService()),
+			zap.Int("shard_id", shardID),
+			zap.Int64("duration_ms", time.Since(start).Milliseconds()),
 		)
 	}
 	return resp, err
