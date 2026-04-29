@@ -29,8 +29,7 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 		}
 		if primaryAddr == "" {
 			logger.Warn("catch-up: primary address unknown, skipping",
-				zap.String("node_id", nodeID),
-				zap.Int("shard_id", shardID),
+								zap.Int("shard_id", shardID),
 			)
 			continue
 		}
@@ -44,8 +43,7 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 		conn, err := grpc.NewClient(primaryAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			logger.Error("catch-up: dial primary failed, skipping shard",
-				zap.String("node_id", nodeID),
-				zap.Int("shard_id", shardID),
+								zap.Int("shard_id", shardID),
 				zap.String("primary_addr", primaryAddr),
 				zap.Error(err),
 			)
@@ -62,8 +60,7 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 
 		if err != nil {
 			logger.Error("catch-up: FetchShardEntries failed, skipping shard",
-				zap.String("node_id", nodeID),
-				zap.Int("shard_id", shardID),
+								zap.Int("shard_id", shardID),
 				zap.String("primary_addr", primaryAddr),
 				zap.Error(err),
 			)
@@ -79,8 +76,7 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 			segPath, err := manager.AppendWithPath(e)
 			if err != nil {
 				logger.Error("catch-up: append entry failed",
-					zap.String("node_id", nodeID),
-					zap.Int("shard_id", shardID),
+										zap.Int("shard_id", shardID),
 					zap.String("entry_id", e.ID),
 					zap.Error(err),
 				)
@@ -91,8 +87,7 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 			appended++
 		}
 		logger.Info("catch-up: shard caught up",
-			zap.String("node_id", nodeID),
-			zap.Int("shard_id", shardID),
+						zap.Int("shard_id", shardID),
 			zap.Int("entries_appended", shardAppended),
 			zap.String("primary_addr", primaryAddr),
 		)
