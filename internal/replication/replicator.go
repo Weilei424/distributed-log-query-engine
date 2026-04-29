@@ -18,8 +18,9 @@ import (
 const channelCapacity = 256
 
 type replicaJob struct {
-	entry   *types.LogEntry
-	shardID int
+	entry     *types.LogEntry
+	shardID   int
+	requestID string
 }
 
 // Replicator asynchronously delivers log entries to replica nodes via ReplicateEntry RPC.
@@ -51,13 +52,14 @@ func NewReplicator(totalShards int, nodeID string, logger *zap.Logger) *Replicat
 
 // Enqueue schedules an entry for async replication to addr.
 // Non-blocking: if the channel is full the entry is dropped and logged.
-func (r *Replicator) Enqueue(entry *types.LogEntry, shardID int, addr string) {
+func (r *Replicator) Enqueue(entry *types.LogEntry, shardID int, addr string, requestID string) {
 	ch := r.getOrCreateChannel(addr)
 	select {
-	case ch <- replicaJob{entry: entry, shardID: shardID}:
+	case ch <- replicaJob{entry: entry, shardID: shardID, requestID: requestID}:
 		observability.ReplicationLagEntries.WithLabelValues(addr).Set(float64(len(ch)))
 	default:
 		r.logger.Warn("replication channel full, dropping entry",
+			zap.String("request_id", requestID),
 			zap.String("addr", addr),
 			zap.String("entry_id", entry.ID),
 		)
@@ -118,7 +120,11 @@ func (r *Replicator) send(ctx context.Context, client logengine.IngestServiceCli
 		ShardId: int32(job.shardID),
 	})
 	if err != nil {
-		r.logger.Warn("ReplicateEntry failed", zap.String("entry_id", job.entry.ID), zap.Error(err))
+		r.logger.Warn("ReplicateEntry failed",
+			zap.String("request_id", job.requestID),
+			zap.String("entry_id", job.entry.ID),
+			zap.Error(err),
+		)
 	}
 }
 
