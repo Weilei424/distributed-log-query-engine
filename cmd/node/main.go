@@ -121,6 +121,25 @@ func main() {
 
 	querySrv = query.NewQueryServer(query.NewLocalExecutor(idx, manager), nodeID, nodeLogger)
 
+	compactCfg := storage.DefaultCompactorConfig()
+	if v := os.Getenv("COMPACT_MERGE_THRESHOLD_BYTES"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			compactCfg.MergeThresholdBytes = n
+		}
+	}
+	if v := os.Getenv("COMPACT_RETENTION_DAYS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			compactCfg.RetentionDays = n
+		}
+	}
+	if v := os.Getenv("COMPACT_INTERVAL_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			compactCfg.IntervalSeconds = n
+		}
+	}
+	compactor := storage.NewCompactorWithIndex(manager, idx, compactCfg)
+	go compactor.Start(ctx)
+
 	grpcSrv := grpc.NewServer()
 	logengine.RegisterIngestServiceServer(grpcSrv, ingestSrv)
 	logengine.RegisterQueryServiceServer(grpcSrv, querySrv)
