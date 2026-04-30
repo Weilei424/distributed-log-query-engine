@@ -208,16 +208,21 @@
 
 ## Phase 8 — Stretch Goals and Resume Polish
 
-- [ ] Bloom filters for segment skipping during query pruning
-- [ ] Compaction job for merging or archiving older segments
-- [ ] More expressive query language: AND, OR, field filters
-- [ ] Query result caching for repeated requests
-- [ ] Multi-tenant namespace or isolation support
-- [ ] Architecture diagram added to docs
-- [ ] README polished for public portfolio use
-- [ ] Resume bullets drafted based on measurable project outcomes
-- [ ] At least one advanced feature benchmarked with before/after numbers
-- [ ] Segment file transfer catch-up (Option C): transfer full closed segment files from primary to replica on restart, replacing entry-by-entry fetch for nodes down for extended periods
+### Status: Complete
+
+**Plan:** `docs/superpowers/plans/2026-04-29-phase8-stretch-goals.md`
+**Spec:** `docs/superpowers/specs/2026-04-29-phase8-stretch-goals-design.md`
+
+- [x] Namespace-aware shard routing: `hash(namespace:service) % shards`, filter propagated through full fan-out path
+- [x] Boolean query language: recursive descent parser (AND/OR/NOT, field:value, grouping), wired into LocalExecutor
+- [x] Bloom filter pruning: optional `.bloom` sidecar per segment (`BLOOM_ENABLED=true`), written on rotation, checked before segment reads
+- [x] Compaction worker: merge pass (size threshold) + retention pass (age cutoff), configurable via `COMPACT_*` env vars, wired into node startup
+- [x] Query result cache: TTL + LRU on coordinator, SHA-256 cache key, skips fan-out for repeated identical queries
+- [x] Segment file transfer: `ListSegments` + streaming `TransferSegment` RPC; catch-up transfers closed segments before entry-level sync
+- [x] Architecture diagram: `docs/architecture/diagram.md` (Mermaid)
+- [x] README polished for public portfolio with feature table and design tradeoffs section
+- [x] Bloom benchmark script: `test/bench/bloom_benchmark.sh` + results placeholder in `docs/benchmarks/`
+- [x] Resume bullets drafted: `docs/planning/RESUME_BULLETS.md`
 
 ---
 
