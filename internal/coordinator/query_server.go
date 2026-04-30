@@ -50,6 +50,7 @@ func (s *FanOutQueryServer) Query(ctx context.Context, req *logengine.QueryReque
 			Id:         e.ID,
 			Timestamp:  e.Timestamp,
 			ReceivedAt: e.ReceivedAt,
+			Namespace:  e.Namespace,
 			Service:    e.Service,
 			Level:      e.Level,
 			Message:    e.Message,
