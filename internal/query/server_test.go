@@ -121,7 +121,7 @@ func TestQueryServer_GRPCRoundTrip(t *testing.T) {
 		}
 	}
 
-	resp, err := queryClient.Query(ctx, &logengine.QueryRequest{Keyword: "login"})
+	resp, err := queryClient.Query(ctx, &logengine.QueryRequest{QueryString: "login"})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
