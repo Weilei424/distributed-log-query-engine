@@ -20,21 +20,23 @@ type SegmentMeta struct {
 }
 
 // Index is a thread-safe in-memory inverted index.
-// It maps message tokens and service names to segment paths, and tracks
-// per-segment time bounds for time-range pruning.
+// It maps message tokens, service names, and namespaces to segment paths, and
+// tracks per-segment time bounds for time-range pruning.
 type Index struct {
-	mu              sync.RWMutex
-	tokenSegments   map[string]map[string]struct{} // token → set of segment paths
-	serviceSegments map[string]map[string]struct{} // service → set of segment paths
-	segmentMeta     map[string]SegmentMeta         // segment path → time bounds
+	mu                 sync.RWMutex
+	tokenSegments      map[string]map[string]struct{} // token → set of segment paths
+	serviceSegments    map[string]map[string]struct{} // service → set of segment paths
+	namespaceSegments  map[string]map[string]struct{} // namespace → set of segment paths
+	segmentMeta        map[string]SegmentMeta         // segment path → time bounds
 }
 
 // NewIndex returns an initialized empty Index.
 func NewIndex() *Index {
 	return &Index{
-		tokenSegments:   make(map[string]map[string]struct{}),
-		serviceSegments: make(map[string]map[string]struct{}),
-		segmentMeta:     make(map[string]SegmentMeta),
+		tokenSegments:     make(map[string]map[string]struct{}),
+		serviceSegments:   make(map[string]map[string]struct{}),
+		namespaceSegments: make(map[string]map[string]struct{}),
+		segmentMeta:       make(map[string]SegmentMeta),
 	}
 }
 
@@ -72,6 +74,12 @@ func (idx *Index) Add(entry *types.LogEntry, segmentPath string) {
 		idx.serviceSegments[entry.Service][segmentPath] = struct{}{}
 	}
 
+	ns := entry.Namespace
+	if idx.namespaceSegments[ns] == nil {
+		idx.namespaceSegments[ns] = make(map[string]struct{})
+	}
+	idx.namespaceSegments[ns][segmentPath] = struct{}{}
+
 	meta, ok := idx.segmentMeta[segmentPath]
 	if !ok {
 		meta = SegmentMeta{MinTime: entry.Timestamp, MaxTime: entry.Timestamp}
@@ -87,37 +95,43 @@ func (idx *Index) Add(entry *types.LogEntry, segmentPath string) {
 }
 
 // Resolve returns the sorted set of segment paths that may contain entries
-// matching the given keyword, service, and time range.
-// Empty keyword or service, and zero time bounds, are ignored.
-func (idx *Index) Resolve(keyword, service string, startTime, endTime int64) []string {
+// matching the given tokens, namespace, service, and time range.
+// Empty tokens slice, empty namespace or service, and zero time bounds, are ignored.
+func (idx *Index) Resolve(tokens []string, namespace, service string, startTime, endTime int64) []string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
 	// Start with all known segments.
-	// segmentMeta is the authoritative set of indexed segments; Add always writes it,
-	// so any path in tokenSegments or serviceSegments is guaranteed to be here too.
 	candidates := make(map[string]struct{})
 	for path := range idx.segmentMeta {
 		candidates[path] = struct{}{}
 	}
 
-	// Intersect by keyword tokens (only when keyword is non-empty).
-	// Both the index and executor use token-based matching: the keyword is tokenized
-	// and each token must appear as an exact word in the message. This keeps index
-	// lookup at O(1) per token and keeps index and executor semantics consistent.
-	if keyword != "" {
-		for _, tok := range tokenize(keyword) {
-			segs, ok := idx.tokenSegments[tok]
-			if !ok {
-				return nil
+	// Intersect by required tokens. Each token must appear in the segment.
+	for _, tok := range tokens {
+		segs, ok := idx.tokenSegments[tok]
+		if !ok {
+			return nil
+		}
+		for path := range candidates {
+			if _, found := segs[path]; !found {
+				delete(candidates, path)
 			}
-			for path := range candidates {
-				if _, found := segs[path]; !found {
-					delete(candidates, path)
-				}
-			}
-			if len(candidates) == 0 {
-				return nil
+		}
+		if len(candidates) == 0 {
+			return nil
+		}
+	}
+
+	// Intersect by namespace (non-empty only).
+	if namespace != "" {
+		segs, ok := idx.namespaceSegments[namespace]
+		if !ok {
+			return nil
+		}
+		for path := range candidates {
+			if _, found := segs[path]; !found {
+				delete(candidates, path)
 			}
 		}
 	}
