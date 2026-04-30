@@ -58,7 +58,7 @@ func TestLatestReceivedAtForShard_EqualTimestamps(t *testing.T) {
 func TestCatchUp_EqualTimestamps(t *testing.T) {
 	const totalShards = 4
 	const service = "svc-a"
-	shardID := ingest.ShardID(service, totalShards)
+	shardID := ingest.ShardID("", service, totalShards)
 
 	// Simulate primary storage: two entries with identical timestamps.
 	primaryDir := t.TempDir()
@@ -96,7 +96,7 @@ func TestCatchUp_EqualTimestamps(t *testing.T) {
 	}
 	fetched := make(map[string]bool)
 	for _, e := range primaryEntries {
-		if ingest.ShardID(e.Service, totalShards) == shardID && e.ReceivedAt >= watermark {
+		if ingest.ShardID(e.Namespace, e.Service, totalShards) == shardID && e.ReceivedAt >= watermark {
 			fetched[e.ID] = true
 		}
 	}
@@ -115,7 +115,7 @@ func TestCatchUp_EqualTimestamps(t *testing.T) {
 	knownIDs := map[string]bool{"entry-A": true}
 	appended := 0
 	for _, e := range primaryEntries {
-		if ingest.ShardID(e.Service, totalShards) != shardID {
+		if ingest.ShardID(e.Namespace, e.Service, totalShards) != shardID {
 			continue
 		}
 		if e.ReceivedAt < watermark {
