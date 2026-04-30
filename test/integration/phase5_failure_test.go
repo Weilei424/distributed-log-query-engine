@@ -32,7 +32,7 @@ func TestPhase5_PrimaryFailure_ReplicaStillServesLogs(t *testing.T) {
 	}
 	var svcForNodeA string
 	for _, svc := range []string{"alpha", "beta", "gamma", "delta", "epsilon", "zeta"} {
-		sid := ingest.ShardID(svc, totalShards)
+		sid := ingest.ShardID("", svc, totalShards)
 		if sr, ok := state.Shards[sid]; ok && sr.PrimaryNode == "node-a" {
 			svcForNodeA = svc
 			break
@@ -44,7 +44,7 @@ func TestPhase5_PrimaryFailure_ReplicaStillServesLogs(t *testing.T) {
 
 	// Wait until nodeA's local state cache also knows about the replica so that
 	// the replicator has a valid destination address when we write.
-	shardForSvc := ingest.ShardID(svcForNodeA, totalShards)
+	shardForSvc := ingest.ShardID("", svcForNodeA, totalShards)
 	cacheDeadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(cacheDeadline) {
 		_, replica := nodeA.stateCache.ShardOwners(shardForSvc)

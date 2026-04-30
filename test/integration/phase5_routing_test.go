@@ -27,7 +27,7 @@ func TestPhase5_RoutingForwardsToCorrectPrimary(t *testing.T) {
 	for time.Now().Before(deadline) {
 		state := coord.fsm.State()
 		for _, svc := range []string{"alpha", "beta", "gamma", "delta", "epsilon", "zeta"} {
-			sid := ingest.ShardID(svc, totalShards)
+			sid := ingest.ShardID("", svc, totalShards)
 			sr, ok := state.Shards[sid]
 			if !ok || sr.PrimaryNode != "node-b" {
 				continue
@@ -46,7 +46,7 @@ func TestPhase5_RoutingForwardsToCorrectPrimary(t *testing.T) {
 	}
 	// Also wait until node-b's cache shows itself as primary so it won't forward back.
 	if serviceThatRoutesToB != "" {
-		sid := ingest.ShardID(serviceThatRoutesToB, totalShards)
+		sid := ingest.ShardID("", serviceThatRoutesToB, totalShards)
 		deadline2 := time.Now().Add(2 * time.Second)
 		for time.Now().Before(deadline2) {
 			primary, _ := nodeB.stateCache.ShardOwners(sid)
@@ -59,7 +59,7 @@ func TestPhase5_RoutingForwardsToCorrectPrimary(t *testing.T) {
 	if serviceThatRoutesToB == "" {
 		t.Skip("could not find a test service that routes to node-b; shard distribution may differ")
 	}
-	t.Logf("using service %q (shard %d → node-b)", serviceThatRoutesToB, ingest.ShardID(serviceThatRoutesToB, totalShards))
+	t.Logf("using service %q (shard %d → node-b)", serviceThatRoutesToB, ingest.ShardID("", serviceThatRoutesToB, totalShards))
 
 	clientA := nodeA.ingestClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

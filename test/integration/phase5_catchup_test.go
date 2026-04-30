@@ -40,7 +40,7 @@ func TestPhase5_CatchUp_ReplicaFetchesMissedEntries(t *testing.T) {
 	}
 	var svcForNodeA string
 	for _, svc := range []string{"alpha", "beta", "gamma", "delta", "epsilon", "zeta"} {
-		sid := ingest.ShardID(svc, totalShards)
+		sid := ingest.ShardID("", svc, totalShards)
 		if sr, ok := state.Shards[sid]; ok && sr.PrimaryNode == "node-a" {
 			svcForNodeA = svc
 			break
@@ -127,7 +127,7 @@ func TestPhase5_CatchUp_ReplicaFetchesMissedEntries(t *testing.T) {
 	}
 	defer replicaConn.Close()
 
-	shardID := ingest.ShardID(svcForNodeA, totalShards)
+	shardID := ingest.ShardID("", svcForNodeA, totalShards)
 	_, err = logengine.NewIngestServiceClient(replicaConn).ReplicateEntry(context.Background(), &logengine.ReplicateEntryRequest{
 		Entry:   &logengine.LogEntry{Id: "post-catchup", Service: svcForNodeA, Message: "post-restart", Level: "INFO"},
 		ShardId: int32(shardID),
