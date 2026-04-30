@@ -10,6 +10,7 @@ type LogEntry struct {
 	ID         string
 	Timestamp  int64
 	ReceivedAt int64
+	Namespace  string
 	Service    string
 	Level      string
 	Message    string
