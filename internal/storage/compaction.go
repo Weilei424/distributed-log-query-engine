@@ -103,8 +103,13 @@ func (c *Compactor) mergeRun(paths []string) {
 		return
 	}
 
-	dir := filepath.Dir(paths[0])
-	newPath := filepath.Join(dir, fmt.Sprintf("compacted-%d.seg", time.Now().UnixNano()))
+	// Allocate a numeric segment name from the manager's sequence counter so
+	// that restarts can always parse the filename as a uint64.
+	c.manager.mu.Lock()
+	newPath := filepath.Join(c.manager.dir, fmt.Sprintf(segmentNameFmt, c.manager.nextSeq))
+	c.manager.nextSeq++
+	c.manager.mu.Unlock()
+
 	seg, err := OpenSegment(newPath)
 	if err != nil {
 		return
@@ -165,6 +170,9 @@ func (c *Compactor) mergeRun(paths []string) {
 	for _, op := range paths {
 		os.Remove(op)
 		os.Remove(BloomPath(op))
+		if c.idx != nil {
+			c.idx.RemoveSegment(op)
+		}
 	}
 
 	if c.idx != nil {
@@ -196,6 +204,9 @@ func (c *Compactor) runRetentionPass() {
 			c.manager.DeleteSegment(path)
 			os.Remove(path)
 			os.Remove(BloomPath(path))
+			if c.idx != nil {
+				c.idx.RemoveSegment(path)
+			}
 		}
 	}
 }
