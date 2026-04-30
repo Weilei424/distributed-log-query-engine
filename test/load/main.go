@@ -103,7 +103,7 @@ func main() {
 						kw := keywords[rand.Intn(len(keywords))]
 						start := time.Now()
 						resp, err := queryClient.Query(ctx, &logengine.QueryRequest{
-							Keyword: kw,
+							QueryString: kw,
 							Limit:   20,
 						})
 						ms := time.Since(start).Milliseconds()
