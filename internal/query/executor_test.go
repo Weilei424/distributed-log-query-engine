@@ -37,7 +37,7 @@ func TestExecute_KeywordFilter(t *testing.T) {
 	}
 	ex := newExecutor(t, entries)
 
-	result, err := ex.Execute(context.Background(), &types.QueryRequest{Keyword: "login"})
+	result, err := ex.Execute(context.Background(), &types.QueryRequest{QueryString: "login"})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestExecute_KeywordCaseInsensitive(t *testing.T) {
 	}
 	ex := newExecutor(t, entries)
 
-	result, err := ex.Execute(context.Background(), &types.QueryRequest{Keyword: "login"})
+	result, err := ex.Execute(context.Background(), &types.QueryRequest{QueryString: "login"})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestExecute_SortedDescending(t *testing.T) {
 	}
 	ex := newExecutor(t, entries)
 
-	result, err := ex.Execute(context.Background(), &types.QueryRequest{Keyword: "event"})
+	result, err := ex.Execute(context.Background(), &types.QueryRequest{QueryString: "event"})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestExecute_KeywordPartialToken_NoMatch(t *testing.T) {
 	}
 	ex := newExecutor(t, entries)
 
-	result, err := ex.Execute(context.Background(), &types.QueryRequest{Keyword: "log"})
+	result, err := ex.Execute(context.Background(), &types.QueryRequest{QueryString: "log"})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
