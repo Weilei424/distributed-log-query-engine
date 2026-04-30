@@ -4,12 +4,13 @@ package types
 // StartTime and EndTime are Unix nanoseconds; zero means unbounded.
 // Limit of zero uses the server default (100).
 type QueryRequest struct {
-	Keyword   string
-	Service   string
-	StartTime int64
-	EndTime   int64
-	Limit     int32
-	Offset    int32
+	QueryString string
+	Namespace   string
+	Service     string
+	StartTime   int64
+	EndTime     int64
+	Limit       int32
+	Offset      int32
 }
 
 // QueryResult holds the output of a log query.
