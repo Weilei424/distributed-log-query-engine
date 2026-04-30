@@ -13,6 +13,11 @@ import (
 	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
 )
 
+const (
+	cacheTTL      = 30 * time.Second
+	cacheMaxItems = 256
+)
+
 // ClusterStateProvider is satisfied by *metadata.FSM.
 type ClusterStateProvider interface {
 	State() metadata.ClusterState
@@ -26,6 +31,7 @@ type FanOutExecutor struct {
 	nodeTimeoutMs int64
 	fanOutLimit   int32
 	logger        *zap.Logger
+	cache         *QueryCache
 }
 
 // NewFanOutExecutor creates a FanOutExecutor.
@@ -39,6 +45,7 @@ func NewFanOutExecutor(state ClusterStateProvider, nodeTimeoutMs int64, fanOutLi
 		nodeTimeoutMs: nodeTimeoutMs,
 		fanOutLimit:   fanOutLimit,
 		logger:        logger,
+		cache:         NewQueryCache(cacheTTL, cacheMaxItems),
 	}
 }
 
@@ -50,6 +57,12 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 	defer func() {
 		observability.QueryDuration.WithLabelValues("coordinator", "fanout").Observe(time.Since(start).Seconds())
 	}()
+
+	cacheKey := CacheKey(req.QueryString, req.Namespace, req.Service, req.StartTime, req.EndTime, req.Limit, req.Offset)
+	if cached, ok := e.cache.Get(cacheKey); ok {
+		e.logger.Info("query cache hit", zap.String("key", cacheKey[:8]))
+		return cached, nil
+	}
 
 	cs := e.state.State()
 
@@ -82,12 +95,13 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 	// merge can satisfy the client's full window. fanOutLimit is also a floor.
 	nodeLimit := max(e.fanOutLimit, req.Offset+clientLimit)
 	fanReq := &logengine.QueryRequest{
-		Keyword:   req.Keyword,
-		Service:   req.Service,
-		StartTime: req.StartTime,
-		EndTime:   req.EndTime,
-		Limit:     nodeLimit,
-		Offset:    0,
+		QueryString: req.QueryString,
+		Namespace:   req.Namespace,
+		Service:     req.Service,
+		StartTime:   req.StartTime,
+		EndTime:     req.EndTime,
+		Limit:       nodeLimit,
+		Offset:      0,
 	}
 
 	ch := make(chan nodeResult, len(targets))
@@ -139,6 +153,7 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 					ID:         pb.Id,
 					Timestamp:  pb.Timestamp,
 					ReceivedAt: pb.ReceivedAt,
+					Namespace:  pb.Namespace,
 					Service:    pb.Service,
 					Level:      pb.Level,
 					Message:    pb.Message,
@@ -180,10 +195,14 @@ func (e *FanOutExecutor) Execute(ctx context.Context, req *logengine.QueryReques
 		zap.Bool("partial", out.partial),
 	)
 
-	return &types.QueryResult{
+	result := &types.QueryResult{
 		Entries: out.entries,
 		Total:   out.total,
 		TookMs:  time.Since(start).Milliseconds(),
 		Partial: out.partial,
-	}, nil
+	}
+	if !result.Partial {
+		e.cache.Put(cacheKey, result)
+	}
+	return result, nil
 }
