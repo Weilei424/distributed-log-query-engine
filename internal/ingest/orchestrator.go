@@ -89,7 +89,7 @@ func (o *Orchestrator) HandleIngest(ctx context.Context, req *logengine.IngestRe
 		return o.writeLocal(ctx, req.Entry, "")
 	}
 
-	shardID := ShardID(req.Entry.Service, o.totalShards)
+	shardID := ShardID(req.Entry.Namespace, req.Entry.Service, o.totalShards)
 	primaryID, replicaID := o.stateReader.ShardOwners(shardID)
 
 	if primaryID == "" {
@@ -122,7 +122,7 @@ func (o *Orchestrator) writeLocal(ctx context.Context, pb *logengine.LogEntry, r
 		if replicaAddr != "" {
 			shardID := 0
 			if o.totalShards > 0 {
-				shardID = ShardID(entry.Service, o.totalShards)
+				shardID = ShardID(entry.Namespace, entry.Service, o.totalShards)
 			}
 			o.replicator.Enqueue(entry, shardID, replicaAddr, observability.RequestIDFromContext(ctx))
 		}
