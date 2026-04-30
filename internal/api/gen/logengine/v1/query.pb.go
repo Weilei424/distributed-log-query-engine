@@ -23,8 +23,9 @@ const (
 
 type QueryRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Keyword to search for in log messages.
-	Keyword string `protobuf:"bytes,1,opt,name=keyword,proto3" json:"keyword,omitempty"`
+	// Boolean query string. Supports bare terms, field:value filters, AND/OR operators.
+	// Empty means match-all. Replaces the old keyword field (same field number 1 — wire-compatible rename).
+	QueryString string `protobuf:"bytes,1,opt,name=query_string,json=queryString,proto3" json:"query_string,omitempty"`
 	// Filter by service name. Empty means all services.
 	Service string `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
 	// Lower bound of the time range (Unix nanoseconds). 0 means unbounded.
@@ -34,7 +35,9 @@ type QueryRequest struct {
 	// Maximum number of entries to return. 0 uses server default (100).
 	Limit int32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
 	// Number of entries to skip for pagination.
-	Offset        int32 `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
+	Offset int32 `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Filter by namespace. Empty means all namespaces.
+	Namespace     string `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -69,9 +72,9 @@ func (*QueryRequest) Descriptor() ([]byte, []int) {
 	return file_logengine_v1_query_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *QueryRequest) GetKeyword() string {
+func (x *QueryRequest) GetQueryString() string {
 	if x != nil {
-		return x.Keyword
+		return x.QueryString
 	}
 	return ""
 }
@@ -111,19 +114,19 @@ func (x *QueryRequest) GetOffset() int32 {
 	return 0
 }
 
+func (x *QueryRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
 type QueryResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Matching log entries, sorted by timestamp descending.
-	Entries []*LogEntry `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
-	// Deduplicated candidate count across all responding nodes, before
-	// offset/limit are applied. This is a lower bound: each node is asked for
-	// at most max(fan_out_limit, offset+limit) entries, so if a node holds more
-	// matches than that window, total will undercount. When partial=true, failed
-	// nodes are excluded and total reflects only the responding subset.
-	Total int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
-	// True if one or more nodes did not respond within the deadline.
-	Partial bool `protobuf:"varint,3,opt,name=partial,proto3" json:"partial,omitempty"`
-	// Total wall-clock time for the query in milliseconds.
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Entries []*LogEntry            `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	// Deduplicated candidate count before offset/limit (see Architecture Notes Decision 7).
+	Total         int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	Partial       bool  `protobuf:"varint,3,opt,name=partial,proto3" json:"partial,omitempty"`
 	TookMs        int64 `protobuf:"varint,4,opt,name=took_ms,json=tookMs,proto3" json:"took_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -191,15 +194,16 @@ var File_logengine_v1_query_proto protoreflect.FileDescriptor
 
 const file_logengine_v1_query_proto_rawDesc = "" +
 	"\n" +
-	"\x18logengine/v1/query.proto\x12\flogengine.v1\x1a\x1clogengine/v1/log_entry.proto\"\xaa\x01\n" +
-	"\fQueryRequest\x12\x18\n" +
-	"\akeyword\x18\x01 \x01(\tR\akeyword\x12\x18\n" +
+	"\x18logengine/v1/query.proto\x12\flogengine.v1\x1a\x1clogengine/v1/log_entry.proto\"\xd1\x01\n" +
+	"\fQueryRequest\x12!\n" +
+	"\fquery_string\x18\x01 \x01(\tR\vqueryString\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x1d\n" +
 	"\n" +
 	"start_time\x18\x03 \x01(\x03R\tstartTime\x12\x19\n" +
 	"\bend_time\x18\x04 \x01(\x03R\aendTime\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06offset\x18\x06 \x01(\x05R\x06offset\"\x8a\x01\n" +
+	"\x06offset\x18\x06 \x01(\x05R\x06offset\x12\x1c\n" +
+	"\tnamespace\x18\a \x01(\tR\tnamespace\"\x8a\x01\n" +
 	"\rQueryResponse\x120\n" +
 	"\aentries\x18\x01 \x03(\v2\x16.logengine.v1.LogEntryR\aentries\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12\x18\n" +

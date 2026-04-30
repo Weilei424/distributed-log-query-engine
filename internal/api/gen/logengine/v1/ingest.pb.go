@@ -409,6 +409,190 @@ func (x *FetchShardEntriesResponse) GetEntries() []*LogEntry {
 	return nil
 }
 
+type ListSegmentsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ShardId       int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSegmentsRequest) Reset() {
+	*x = ListSegmentsRequest{}
+	mi := &file_logengine_v1_ingest_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSegmentsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSegmentsRequest) ProtoMessage() {}
+
+func (x *ListSegmentsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_logengine_v1_ingest_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSegmentsRequest.ProtoReflect.Descriptor instead.
+func (*ListSegmentsRequest) Descriptor() ([]byte, []int) {
+	return file_logengine_v1_ingest_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListSegmentsRequest) GetShardId() int32 {
+	if x != nil {
+		return x.ShardId
+	}
+	return 0
+}
+
+type ListSegmentsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SegmentNames  []string               `protobuf:"bytes,1,rep,name=segment_names,json=segmentNames,proto3" json:"segment_names,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSegmentsResponse) Reset() {
+	*x = ListSegmentsResponse{}
+	mi := &file_logengine_v1_ingest_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSegmentsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSegmentsResponse) ProtoMessage() {}
+
+func (x *ListSegmentsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_logengine_v1_ingest_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSegmentsResponse.ProtoReflect.Descriptor instead.
+func (*ListSegmentsResponse) Descriptor() ([]byte, []int) {
+	return file_logengine_v1_ingest_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListSegmentsResponse) GetSegmentNames() []string {
+	if x != nil {
+		return x.SegmentNames
+	}
+	return nil
+}
+
+type TransferSegmentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SegmentName   string                 `protobuf:"bytes,1,opt,name=segment_name,json=segmentName,proto3" json:"segment_name,omitempty"`
+	ShardId       int32                  `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TransferSegmentRequest) Reset() {
+	*x = TransferSegmentRequest{}
+	mi := &file_logengine_v1_ingest_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TransferSegmentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TransferSegmentRequest) ProtoMessage() {}
+
+func (x *TransferSegmentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_logengine_v1_ingest_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TransferSegmentRequest.ProtoReflect.Descriptor instead.
+func (*TransferSegmentRequest) Descriptor() ([]byte, []int) {
+	return file_logengine_v1_ingest_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *TransferSegmentRequest) GetSegmentName() string {
+	if x != nil {
+		return x.SegmentName
+	}
+	return ""
+}
+
+func (x *TransferSegmentRequest) GetShardId() int32 {
+	if x != nil {
+		return x.ShardId
+	}
+	return 0
+}
+
+type TransferSegmentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Chunk         []byte                 `protobuf:"bytes,1,opt,name=chunk,proto3" json:"chunk,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TransferSegmentResponse) Reset() {
+	*x = TransferSegmentResponse{}
+	mi := &file_logengine_v1_ingest_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TransferSegmentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TransferSegmentResponse) ProtoMessage() {}
+
+func (x *TransferSegmentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_logengine_v1_ingest_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TransferSegmentResponse.ProtoReflect.Descriptor instead.
+func (*TransferSegmentResponse) Descriptor() ([]byte, []int) {
+	return file_logengine_v1_ingest_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *TransferSegmentResponse) GetChunk() []byte {
+	if x != nil {
+		return x.Chunk
+	}
+	return nil
+}
+
 var File_logengine_v1_ingest_proto protoreflect.FileDescriptor
 
 const file_logengine_v1_ingest_proto_rawDesc = "" +
@@ -433,12 +617,23 @@ const file_logengine_v1_ingest_proto_rawDesc = "" +
 	"\bshard_id\x18\x01 \x01(\x05R\ashardId\x12\"\n" +
 	"\rsince_unix_ns\x18\x02 \x01(\x03R\vsinceUnixNs\"M\n" +
 	"\x19FetchShardEntriesResponse\x120\n" +
-	"\aentries\x18\x01 \x03(\v2\x16.logengine.v1.LogEntryR\aentries2\xeb\x02\n" +
+	"\aentries\x18\x01 \x03(\v2\x16.logengine.v1.LogEntryR\aentries\"0\n" +
+	"\x13ListSegmentsRequest\x12\x19\n" +
+	"\bshard_id\x18\x01 \x01(\x05R\ashardId\";\n" +
+	"\x14ListSegmentsResponse\x12#\n" +
+	"\rsegment_names\x18\x01 \x03(\tR\fsegmentNames\"V\n" +
+	"\x16TransferSegmentRequest\x12!\n" +
+	"\fsegment_name\x18\x01 \x01(\tR\vsegmentName\x12\x19\n" +
+	"\bshard_id\x18\x02 \x01(\x05R\ashardId\"/\n" +
+	"\x17TransferSegmentResponse\x12\x14\n" +
+	"\x05chunk\x18\x01 \x01(\fR\x05chunk2\xa4\x04\n" +
 	"\rIngestService\x12C\n" +
 	"\x06Ingest\x12\x1b.logengine.v1.IngestRequest\x1a\x1c.logengine.v1.IngestResponse\x12R\n" +
 	"\vIngestBatch\x12 .logengine.v1.IngestBatchRequest\x1a!.logengine.v1.IngestBatchResponse\x12[\n" +
 	"\x0eReplicateEntry\x12#.logengine.v1.ReplicateEntryRequest\x1a$.logengine.v1.ReplicateEntryResponse\x12d\n" +
-	"\x11FetchShardEntries\x12&.logengine.v1.FetchShardEntriesRequest\x1a'.logengine.v1.FetchShardEntriesResponseB[ZYgithub.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1;logengineb\x06proto3"
+	"\x11FetchShardEntries\x12&.logengine.v1.FetchShardEntriesRequest\x1a'.logengine.v1.FetchShardEntriesResponse\x12U\n" +
+	"\fListSegments\x12!.logengine.v1.ListSegmentsRequest\x1a\".logengine.v1.ListSegmentsResponse\x12`\n" +
+	"\x0fTransferSegment\x12$.logengine.v1.TransferSegmentRequest\x1a%.logengine.v1.TransferSegmentResponse0\x01B[ZYgithub.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1;logengineb\x06proto3"
 
 var (
 	file_logengine_v1_ingest_proto_rawDescOnce sync.Once
@@ -452,7 +647,7 @@ func file_logengine_v1_ingest_proto_rawDescGZIP() []byte {
 	return file_logengine_v1_ingest_proto_rawDescData
 }
 
-var file_logengine_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_logengine_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_logengine_v1_ingest_proto_goTypes = []any{
 	(*IngestRequest)(nil),             // 0: logengine.v1.IngestRequest
 	(*IngestResponse)(nil),            // 1: logengine.v1.IngestResponse
@@ -462,26 +657,34 @@ var file_logengine_v1_ingest_proto_goTypes = []any{
 	(*ReplicateEntryResponse)(nil),    // 5: logengine.v1.ReplicateEntryResponse
 	(*FetchShardEntriesRequest)(nil),  // 6: logengine.v1.FetchShardEntriesRequest
 	(*FetchShardEntriesResponse)(nil), // 7: logengine.v1.FetchShardEntriesResponse
-	(*LogEntry)(nil),                  // 8: logengine.v1.LogEntry
+	(*ListSegmentsRequest)(nil),       // 8: logengine.v1.ListSegmentsRequest
+	(*ListSegmentsResponse)(nil),      // 9: logengine.v1.ListSegmentsResponse
+	(*TransferSegmentRequest)(nil),    // 10: logengine.v1.TransferSegmentRequest
+	(*TransferSegmentResponse)(nil),   // 11: logengine.v1.TransferSegmentResponse
+	(*LogEntry)(nil),                  // 12: logengine.v1.LogEntry
 }
 var file_logengine_v1_ingest_proto_depIdxs = []int32{
-	8, // 0: logengine.v1.IngestRequest.entry:type_name -> logengine.v1.LogEntry
-	8, // 1: logengine.v1.IngestBatchRequest.entries:type_name -> logengine.v1.LogEntry
-	8, // 2: logengine.v1.ReplicateEntryRequest.entry:type_name -> logengine.v1.LogEntry
-	8, // 3: logengine.v1.FetchShardEntriesResponse.entries:type_name -> logengine.v1.LogEntry
-	0, // 4: logengine.v1.IngestService.Ingest:input_type -> logengine.v1.IngestRequest
-	2, // 5: logengine.v1.IngestService.IngestBatch:input_type -> logengine.v1.IngestBatchRequest
-	4, // 6: logengine.v1.IngestService.ReplicateEntry:input_type -> logengine.v1.ReplicateEntryRequest
-	6, // 7: logengine.v1.IngestService.FetchShardEntries:input_type -> logengine.v1.FetchShardEntriesRequest
-	1, // 8: logengine.v1.IngestService.Ingest:output_type -> logengine.v1.IngestResponse
-	3, // 9: logengine.v1.IngestService.IngestBatch:output_type -> logengine.v1.IngestBatchResponse
-	5, // 10: logengine.v1.IngestService.ReplicateEntry:output_type -> logengine.v1.ReplicateEntryResponse
-	7, // 11: logengine.v1.IngestService.FetchShardEntries:output_type -> logengine.v1.FetchShardEntriesResponse
-	8, // [8:12] is the sub-list for method output_type
-	4, // [4:8] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	12, // 0: logengine.v1.IngestRequest.entry:type_name -> logengine.v1.LogEntry
+	12, // 1: logengine.v1.IngestBatchRequest.entries:type_name -> logengine.v1.LogEntry
+	12, // 2: logengine.v1.ReplicateEntryRequest.entry:type_name -> logengine.v1.LogEntry
+	12, // 3: logengine.v1.FetchShardEntriesResponse.entries:type_name -> logengine.v1.LogEntry
+	0,  // 4: logengine.v1.IngestService.Ingest:input_type -> logengine.v1.IngestRequest
+	2,  // 5: logengine.v1.IngestService.IngestBatch:input_type -> logengine.v1.IngestBatchRequest
+	4,  // 6: logengine.v1.IngestService.ReplicateEntry:input_type -> logengine.v1.ReplicateEntryRequest
+	6,  // 7: logengine.v1.IngestService.FetchShardEntries:input_type -> logengine.v1.FetchShardEntriesRequest
+	8,  // 8: logengine.v1.IngestService.ListSegments:input_type -> logengine.v1.ListSegmentsRequest
+	10, // 9: logengine.v1.IngestService.TransferSegment:input_type -> logengine.v1.TransferSegmentRequest
+	1,  // 10: logengine.v1.IngestService.Ingest:output_type -> logengine.v1.IngestResponse
+	3,  // 11: logengine.v1.IngestService.IngestBatch:output_type -> logengine.v1.IngestBatchResponse
+	5,  // 12: logengine.v1.IngestService.ReplicateEntry:output_type -> logengine.v1.ReplicateEntryResponse
+	7,  // 13: logengine.v1.IngestService.FetchShardEntries:output_type -> logengine.v1.FetchShardEntriesResponse
+	9,  // 14: logengine.v1.IngestService.ListSegments:output_type -> logengine.v1.ListSegmentsResponse
+	11, // 15: logengine.v1.IngestService.TransferSegment:output_type -> logengine.v1.TransferSegmentResponse
+	10, // [10:16] is the sub-list for method output_type
+	4,  // [4:10] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_logengine_v1_ingest_proto_init() }
@@ -496,7 +699,7 @@ func file_logengine_v1_ingest_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_logengine_v1_ingest_proto_rawDesc), len(file_logengine_v1_ingest_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -37,7 +37,9 @@ type LogEntry struct {
 	// Human-readable log message.
 	Message string `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`
 	// Arbitrary structured metadata fields.
-	Fields        map[string]string `protobuf:"bytes,7,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Fields map[string]string `protobuf:"bytes,7,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Logical tenant or namespace for this log entry. Empty string means default namespace.
+	Namespace     string `protobuf:"bytes,8,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -121,11 +123,18 @@ func (x *LogEntry) GetFields() map[string]string {
 	return nil
 }
 
+func (x *LogEntry) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
 var File_logengine_v1_log_entry_proto protoreflect.FileDescriptor
 
 const file_logengine_v1_log_entry_proto_rawDesc = "" +
 	"\n" +
-	"\x1clogengine/v1/log_entry.proto\x12\flogengine.v1\"\x9a\x02\n" +
+	"\x1clogengine/v1/log_entry.proto\x12\flogengine.v1\"\xb8\x02\n" +
 	"\bLogEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1c\n" +
 	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp\x12\x1f\n" +
@@ -134,7 +143,8 @@ const file_logengine_v1_log_entry_proto_rawDesc = "" +
 	"\aservice\x18\x04 \x01(\tR\aservice\x12\x14\n" +
 	"\x05level\x18\x05 \x01(\tR\x05level\x12\x18\n" +
 	"\amessage\x18\x06 \x01(\tR\amessage\x12:\n" +
-	"\x06fields\x18\a \x03(\v2\".logengine.v1.LogEntry.FieldsEntryR\x06fields\x1a9\n" +
+	"\x06fields\x18\a \x03(\v2\".logengine.v1.LogEntry.FieldsEntryR\x06fields\x12\x1c\n" +
+	"\tnamespace\x18\b \x01(\tR\tnamespace\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B[ZYgithub.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1;logengineb\x06proto3"

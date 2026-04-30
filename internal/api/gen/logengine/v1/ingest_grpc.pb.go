@@ -23,6 +23,8 @@ const (
 	IngestService_IngestBatch_FullMethodName       = "/logengine.v1.IngestService/IngestBatch"
 	IngestService_ReplicateEntry_FullMethodName    = "/logengine.v1.IngestService/ReplicateEntry"
 	IngestService_FetchShardEntries_FullMethodName = "/logengine.v1.IngestService/FetchShardEntries"
+	IngestService_ListSegments_FullMethodName      = "/logengine.v1.IngestService/ListSegments"
+	IngestService_TransferSegment_FullMethodName   = "/logengine.v1.IngestService/TransferSegment"
 )
 
 // IngestServiceClient is the client API for IngestService service.
@@ -41,6 +43,10 @@ type IngestServiceClient interface {
 	// FetchShardEntries returns entries for a shard after a given received_at timestamp.
 	// Called by a replica node during catch-up after restart.
 	FetchShardEntries(ctx context.Context, in *FetchShardEntriesRequest, opts ...grpc.CallOption) (*FetchShardEntriesResponse, error)
+	// ListSegments returns the names of closed segment files owned by the given shard.
+	ListSegments(ctx context.Context, in *ListSegmentsRequest, opts ...grpc.CallOption) (*ListSegmentsResponse, error)
+	// TransferSegment streams the raw bytes of a closed segment file.
+	TransferSegment(ctx context.Context, in *TransferSegmentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TransferSegmentResponse], error)
 }
 
 type ingestServiceClient struct {
@@ -91,6 +97,35 @@ func (c *ingestServiceClient) FetchShardEntries(ctx context.Context, in *FetchSh
 	return out, nil
 }
 
+func (c *ingestServiceClient) ListSegments(ctx context.Context, in *ListSegmentsRequest, opts ...grpc.CallOption) (*ListSegmentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSegmentsResponse)
+	err := c.cc.Invoke(ctx, IngestService_ListSegments_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ingestServiceClient) TransferSegment(ctx context.Context, in *TransferSegmentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TransferSegmentResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &IngestService_ServiceDesc.Streams[0], IngestService_TransferSegment_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TransferSegmentRequest, TransferSegmentResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type IngestService_TransferSegmentClient = grpc.ServerStreamingClient[TransferSegmentResponse]
+
 // IngestServiceServer is the server API for IngestService service.
 // All implementations should embed UnimplementedIngestServiceServer
 // for forward compatibility.
@@ -107,6 +142,10 @@ type IngestServiceServer interface {
 	// FetchShardEntries returns entries for a shard after a given received_at timestamp.
 	// Called by a replica node during catch-up after restart.
 	FetchShardEntries(context.Context, *FetchShardEntriesRequest) (*FetchShardEntriesResponse, error)
+	// ListSegments returns the names of closed segment files owned by the given shard.
+	ListSegments(context.Context, *ListSegmentsRequest) (*ListSegmentsResponse, error)
+	// TransferSegment streams the raw bytes of a closed segment file.
+	TransferSegment(*TransferSegmentRequest, grpc.ServerStreamingServer[TransferSegmentResponse]) error
 }
 
 // UnimplementedIngestServiceServer should be embedded to have
@@ -127,6 +166,12 @@ func (UnimplementedIngestServiceServer) ReplicateEntry(context.Context, *Replica
 }
 func (UnimplementedIngestServiceServer) FetchShardEntries(context.Context, *FetchShardEntriesRequest) (*FetchShardEntriesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method FetchShardEntries not implemented")
+}
+func (UnimplementedIngestServiceServer) ListSegments(context.Context, *ListSegmentsRequest) (*ListSegmentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSegments not implemented")
+}
+func (UnimplementedIngestServiceServer) TransferSegment(*TransferSegmentRequest, grpc.ServerStreamingServer[TransferSegmentResponse]) error {
+	return status.Error(codes.Unimplemented, "method TransferSegment not implemented")
 }
 func (UnimplementedIngestServiceServer) testEmbeddedByValue() {}
 
@@ -220,6 +265,35 @@ func _IngestService_FetchShardEntries_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IngestService_ListSegments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSegmentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServiceServer).ListSegments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IngestService_ListSegments_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServiceServer).ListSegments(ctx, req.(*ListSegmentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IngestService_TransferSegment_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(TransferSegmentRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(IngestServiceServer).TransferSegment(m, &grpc.GenericServerStream[TransferSegmentRequest, TransferSegmentResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type IngestService_TransferSegmentServer = grpc.ServerStreamingServer[TransferSegmentResponse]
+
 // IngestService_ServiceDesc is the grpc.ServiceDesc for IngestService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -243,7 +317,17 @@ var IngestService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "FetchShardEntries",
 			Handler:    _IngestService_FetchShardEntries_Handler,
 		},
+		{
+			MethodName: "ListSegments",
+			Handler:    _IngestService_ListSegments_Handler,
+		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "TransferSegment",
+			Handler:       _IngestService_TransferSegment_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "logengine/v1/ingest.proto",
 }
