@@ -102,10 +102,15 @@ func transferMissingSegments(ctx context.Context, shardID int, manager *storage.
 	for _, p := range manager.ListClosedSegments() {
 		local[filepath.Base(p)] = struct{}{}
 	}
+	// Never overwrite the replica's active segment with a closed copy from the primary.
+	activeName := manager.ActiveSegmentName()
 
 	appended := 0
 	for _, name := range resp.SegmentNames {
 		if _, ok := local[name]; ok {
+			continue
+		}
+		if name == activeName {
 			continue
 		}
 
