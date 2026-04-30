@@ -3,6 +3,9 @@ package ingest
 
 import (
 	"context"
+	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -16,6 +19,8 @@ import (
 	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
 )
+
+const transferChunkSize = 64 * 1024 // 64KB
 
 // Server implements the gRPC IngestServiceServer interface.
 // Client-facing RPCs (Ingest, IngestBatch) delegate to the Orchestrator.
@@ -93,7 +98,7 @@ func (s *Server) Ingest(ctx context.Context, req *logengine.IngestRequest) (*log
 	if err == nil {
 		shardID := -1
 		if s.totalShards > 0 && req.Entry != nil {
-			shardID = ShardID(req.Entry.GetService(), s.totalShards)
+			shardID = ShardID(req.Entry.GetNamespace(), req.Entry.GetService(), s.totalShards)
 		}
 		s.logger.Info("ingest",
 			zap.String("request_id", reqID),
@@ -145,7 +150,7 @@ func (s *Server) ReplicateEntry(ctx context.Context, req *logengine.ReplicateEnt
 	}
 	if s.totalShards > 0 {
 		// Verify the entry actually belongs to the claimed shard.
-		computed := ShardID(req.Entry.Service, s.totalShards)
+		computed := ShardID(req.Entry.Namespace, req.Entry.Service, s.totalShards)
 		if computed != int(req.ShardId) {
 			return nil, status.Errorf(codes.FailedPrecondition,
 				"shard mismatch: computed %d for service %q, request claims %d",
@@ -173,6 +178,52 @@ func (s *Server) ReplicateEntry(ctx context.Context, req *logengine.ReplicateEnt
 	return &logengine.ReplicateEntryResponse{Ok: true}, nil
 }
 
+// ListSegments returns names of closed segment files that contain entries for the given shard.
+func (s *Server) ListSegments(_ context.Context, req *logengine.ListSegmentsRequest) (*logengine.ListSegmentsResponse, error) {
+	closed := s.manager.ListClosedSegments()
+	names := make([]string, 0, len(closed))
+	for _, p := range closed {
+		entries, err := s.manager.ReadSegments([]string{p})
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if s.totalShards == 0 || ShardID(e.Namespace, e.Service, s.totalShards) == int(req.ShardId) {
+				names = append(names, filepath.Base(p))
+				break
+			}
+		}
+	}
+	return &logengine.ListSegmentsResponse{SegmentNames: names}, nil
+}
+
+// TransferSegment streams the raw bytes of a closed segment file.
+func (s *Server) TransferSegment(req *logengine.TransferSegmentRequest, stream logengine.IngestService_TransferSegmentServer) error {
+	path := filepath.Join(s.manager.Dir(), req.SegmentName)
+	f, err := os.Open(path)
+	if err != nil {
+		return status.Errorf(codes.NotFound, "segment not found: %s", req.SegmentName)
+	}
+	defer f.Close()
+
+	buf := make([]byte, transferChunkSize)
+	for {
+		n, err := f.Read(buf)
+		if n > 0 {
+			if sendErr := stream.Send(&logengine.TransferSegmentResponse{Chunk: buf[:n]}); sendErr != nil {
+				return sendErr
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return status.Errorf(codes.Internal, "read segment: %v", err)
+		}
+	}
+	return nil
+}
+
 // FetchShardEntries returns entries for a shard with received_at >= since_unix_ns.
 // Called by a replica node during catch-up on restart. CatchUp deduplicates by ID,
 // so returning entries at the boundary is safe and prevents missed entries when
@@ -185,7 +236,7 @@ func (s *Server) FetchShardEntries(ctx context.Context, req *logengine.FetchShar
 
 	var result []*logengine.LogEntry
 	for _, e := range all {
-		if s.totalShards > 0 && ShardID(e.Service, s.totalShards) != int(req.ShardId) {
+		if s.totalShards > 0 && ShardID(e.Namespace, e.Service, s.totalShards) != int(req.ShardId) {
 			continue
 		}
 		if e.ReceivedAt < req.SinceUnixNs {
