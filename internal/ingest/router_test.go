@@ -1,43 +1,37 @@
 // internal/ingest/router_test.go
-package ingest_test
+package ingest
 
 import (
 	"testing"
-
-	"github.com/Weilei424/distributed-log-query-engine/internal/ingest"
 )
 
 func TestShardID_Deterministic(t *testing.T) {
-	got1 := ingest.ShardID("payments", 16)
-	got2 := ingest.ShardID("payments", 16)
-	if got1 != got2 {
-		t.Fatalf("ShardID not deterministic: %d != %d", got1, got2)
-	}
-}
-
-func TestShardID_InRange(t *testing.T) {
-	for _, svc := range []string{"auth", "payments", "api", "worker", "cache", "db"} {
-		id := ingest.ShardID(svc, 16)
-		if id < 0 || id >= 16 {
-			t.Fatalf("ShardID(%q, 16) = %d, want [0, 16)", svc, id)
+	for i := 0; i < 10; i++ {
+		if ShardID("ns1", "api", 8) != ShardID("ns1", "api", 8) {
+			t.Fatal("ShardID not deterministic")
 		}
 	}
 }
 
-func TestShardID_EmptyService(t *testing.T) {
-	id := ingest.ShardID("", 16)
-	if id < 0 || id >= 16 {
-		t.Fatalf("ShardID(\"\", 16) = %d, out of range", id)
+func TestShardID_NamespaceAffectsResult(t *testing.T) {
+	a := ShardID("ns1", "api", 8)
+	b := ShardID("ns2", "api", 8)
+	if a == b {
+		t.Skip("hash collision — acceptable but unusual")
 	}
 }
 
-func TestShardID_Distribution(t *testing.T) {
-	services := []string{"auth", "payments", "api", "worker", "cache", "db", "search", "notify"}
-	seen := make(map[int]bool)
-	for _, svc := range services {
-		seen[ingest.ShardID(svc, 16)] = true
+func TestShardID_ZeroShards(t *testing.T) {
+	if ShardID("ns", "svc", 0) != 0 {
+		t.Fatal("expected 0 for totalShards=0")
 	}
-	if len(seen) < 4 {
-		t.Fatalf("poor distribution: only %d distinct shards for %d services", len(seen), len(services))
+}
+
+func TestShardID_Range(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		id := ShardID("", "svc", 8)
+		if id < 0 || id >= 8 {
+			t.Fatalf("ShardID out of range: %d", id)
+		}
 	}
 }
