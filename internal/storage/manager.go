@@ -328,17 +328,30 @@ func (m *Manager) Dir() string {
 	return m.dir
 }
 
-// nextSeqFromMatches returns the next sequence number by parsing the last filename.
-// Falls back to 1 if matches is empty.
+// ActiveSegmentName returns the base filename of the current active segment,
+// or "" if no segments exist. Used by transfer validation to reject writes
+// to the active file.
+func (m *Manager) ActiveSegmentName() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.paths) == 0 {
+		return ""
+	}
+	return filepath.Base(m.paths[len(m.paths)-1])
+}
+
+// nextSeqFromMatches returns the next sequence number by scanning from the end
+// of matches for the highest numerically-named file. Skips non-numeric names
+// (e.g. compacted-* from older builds) so compaction cannot break restarts.
+// Falls back to 1 if no numeric name is found.
 func nextSeqFromMatches(matches []string) (uint64, error) {
-	if len(matches) == 0 {
-		return 1, nil
+	for i := len(matches) - 1; i >= 0; i-- {
+		base := filepath.Base(matches[i])
+		base = strings.TrimSuffix(base, ".seg")
+		n, err := strconv.ParseUint(base, 10, 64)
+		if err == nil {
+			return n + 1, nil
+		}
 	}
-	base := filepath.Base(matches[len(matches)-1])
-	base = strings.TrimSuffix(base, ".seg")
-	n, err := strconv.ParseUint(base, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse segment sequence from %q: %w", base, err)
-	}
-	return n + 1, nil
+	return 1, nil
 }
