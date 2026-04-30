@@ -26,4 +26,7 @@ message LogEntry {
 
   // Arbitrary structured metadata fields.
   map<string, string> fields = 7;
+
+  // Logical tenant or namespace for this log entry. Empty string means default namespace.
+  string namespace = 8;
 }
