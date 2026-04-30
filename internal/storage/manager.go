@@ -4,18 +4,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/bits-and-blooms/bloom/v3"
 	"google.golang.org/protobuf/proto"
 
 	logengine "github.com/Weilei424/distributed-log-query-engine/internal/api/gen/logengine/v1"
 	"github.com/Weilei424/distributed-log-query-engine/internal/observability"
 	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
 )
+
+var nonAlphanumericRe = regexp.MustCompile(`[^a-z0-9]+`)
 
 const segmentNameFmt = "%020d.seg"
 
@@ -29,6 +33,8 @@ type Manager struct {
 	nextSeq         uint64
 	paths           []string
 	nodeID          string
+	bloomEnabled    bool
+	blooms          map[string]*bloom.BloomFilter
 }
 
 // ManagerOption configures a Manager.
@@ -63,6 +69,8 @@ func NewManager(dir string, maxSegmentBytes int64, opts ...ManagerOption) (*Mana
 		maxSegmentBytes: maxSegmentBytes,
 		paths:           matches,
 		nextSeq:         nextSeq,
+		bloomEnabled:    os.Getenv("BLOOM_ENABLED") == "true",
+		blooms:          make(map[string]*bloom.BloomFilter),
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -78,6 +86,19 @@ func NewManager(dir string, maxSegmentBytes int64, opts ...ManagerOption) (*Mana
 			return nil, fmt.Errorf("reopen active segment: %w", err)
 		}
 		m.active = seg
+	}
+
+	// Load bloom sidecars for all closed segments (all except the active one).
+	if m.bloomEnabled {
+		closedPaths := m.paths
+		if len(closedPaths) > 0 {
+			closedPaths = closedPaths[:len(closedPaths)-1]
+		}
+		for _, p := range closedPaths {
+			if bf, err := ReadBloom(BloomPath(p)); err == nil {
+				m.blooms[p] = bf
+			}
+		}
 	}
 
 	observability.MountedSegmentsTotal.WithLabelValues(m.nodeID).Set(float64(len(m.paths)))
@@ -115,6 +136,7 @@ func (m *Manager) appendLocked(entry *types.LogEntry) error {
 		Id:         entry.ID,
 		Timestamp:  entry.Timestamp,
 		ReceivedAt: entry.ReceivedAt,
+		Namespace:  entry.Namespace,
 		Service:    entry.Service,
 		Level:      entry.Level,
 		Message:    entry.Message,
@@ -177,14 +199,133 @@ func (m *Manager) openNewSegment() error {
 }
 
 func (m *Manager) rotate() error {
+	closingPath := m.paths[len(m.paths)-1]
 	if err := m.active.Close(); err != nil {
 		return fmt.Errorf("close active segment before rotation: %w", err)
 	}
+
+	if m.bloomEnabled {
+		if entries, err := ReadSegment(closingPath); err == nil {
+			var tokens []string
+			for _, e := range entries {
+				tokens = append(tokens, tokenizeEntry(e)...)
+			}
+			bf := BuildBloom(tokens, uint(len(tokens)))
+			if err := WriteBloom(BloomPath(closingPath), bf); err == nil {
+				m.blooms[closingPath] = bf
+			}
+		}
+	}
+
 	if err := m.openNewSegment(); err != nil {
 		return err
 	}
 	observability.MountedSegmentsTotal.WithLabelValues(m.nodeID).Set(float64(len(m.paths)))
 	return nil
+}
+
+// BloomFor returns the bloom filter for the given segment path, or nil if not loaded.
+func (m *Manager) BloomFor(segPath string) *bloom.BloomFilter {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.blooms[segPath]
+}
+
+func tokenizeEntry(e *types.LogEntry) []string {
+	var out []string
+	lower := strings.ToLower(e.Message)
+	for _, tok := range nonAlphanumericRe.Split(lower, -1) {
+		if tok != "" {
+			out = append(out, tok)
+		}
+	}
+	out = append(out, strings.ToLower(e.Level))
+	out = append(out, strings.ToLower(e.Service))
+	out = append(out, strings.ToLower(e.Namespace))
+	return out
+}
+
+// marshalLogEntry serializes e to protobuf bytes. Used by compaction.
+func marshalLogEntry(e *types.LogEntry) ([]byte, error) {
+	pb := &logengine.LogEntry{
+		Id:         e.ID,
+		Timestamp:  e.Timestamp,
+		ReceivedAt: e.ReceivedAt,
+		Namespace:  e.Namespace,
+		Service:    e.Service,
+		Level:      e.Level,
+		Message:    e.Message,
+		Fields:     e.Fields,
+	}
+	data, err := proto.Marshal(pb)
+	if err != nil {
+		return nil, fmt.Errorf("marshal log entry: %w", err)
+	}
+	return data, nil
+}
+
+// ListClosedSegments returns paths of all segments except the active one.
+func (m *Manager) ListClosedSegments() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.paths) <= 1 {
+		return nil
+	}
+	out := make([]string, len(m.paths)-1)
+	copy(out, m.paths[:len(m.paths)-1])
+	return out
+}
+
+// RemapSegment replaces oldPath with newPath in the manager's path list and bloom map.
+func (m *Manager) RemapSegment(oldPath, newPath string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, p := range m.paths {
+		if p == oldPath {
+			m.paths[i] = newPath
+		}
+	}
+	if bf, ok := m.blooms[oldPath]; ok {
+		m.blooms[newPath] = bf
+		delete(m.blooms, oldPath)
+	}
+}
+
+// DeleteSegment removes path from the manager's path list and bloom map.
+// Does NOT delete the file from disk — caller is responsible.
+func (m *Manager) DeleteSegment(path string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := m.paths[:0]
+	for _, p := range m.paths {
+		if p != path {
+			out = append(out, p)
+		}
+	}
+	m.paths = out
+	delete(m.blooms, path)
+}
+
+// LoadSegment registers a newly transferred segment file with the manager.
+// The segment must already exist on disk.
+func (m *Manager) LoadSegment(path string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	active := m.paths[len(m.paths)-1]
+	rest := m.paths[:len(m.paths)-1]
+	rest = append(rest, path)
+	m.paths = append(rest, active)
+	if m.bloomEnabled {
+		if bf, err := ReadBloom(BloomPath(path)); err == nil {
+			m.blooms[path] = bf
+		}
+	}
+	return nil
+}
+
+// Dir returns the data directory path.
+func (m *Manager) Dir() string {
+	return m.dir
 }
 
 // nextSeqFromMatches returns the next sequence number by parsing the last filename.
