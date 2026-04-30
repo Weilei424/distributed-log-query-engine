@@ -176,6 +176,32 @@ func (idx *Index) TokenCount() int {
 	return len(idx.tokenSegments)
 }
 
+// RemoveSegment removes all index entries that point to path.
+// Called by compaction after merging or deleting a segment.
+func (idx *Index) RemoveSegment(path string) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	delete(idx.segmentMeta, path)
+	for tok, segs := range idx.tokenSegments {
+		delete(segs, path)
+		if len(segs) == 0 {
+			delete(idx.tokenSegments, tok)
+		}
+	}
+	for svc, segs := range idx.serviceSegments {
+		delete(segs, path)
+		if len(segs) == 0 {
+			delete(idx.serviceSegments, svc)
+		}
+	}
+	for ns, segs := range idx.namespaceSegments {
+		delete(segs, path)
+		if len(segs) == 0 {
+			delete(idx.namespaceSegments, ns)
+		}
+	}
+}
+
 // RebuildFromSegments repopulates the index from a list of segment files.
 // readFn is called for each path to load its entries.
 // Returns a wrapped error if any segment cannot be read.
