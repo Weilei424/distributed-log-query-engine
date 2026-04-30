@@ -44,6 +44,7 @@ func storageProtoToEntry(pb *logengine.LogEntry) *types.LogEntry {
 		ID:         pb.Id,
 		Timestamp:  pb.Timestamp,
 		ReceivedAt: pb.ReceivedAt,
+		Namespace:  pb.Namespace,
 		Service:    pb.Service,
 		Level:      pb.Level,
 		Message:    pb.Message,
