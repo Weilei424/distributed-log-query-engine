@@ -3,6 +3,7 @@ module github.com/Weilei424/distributed-log-query-engine
 go 1.24.0
 
 require (
+	github.com/bits-and-blooms/bloom/v3 v3.7.1
 	github.com/hashicorp/raft v1.7.3
 	github.com/hashicorp/raft-boltdb/v2 v2.3.0
 	github.com/prometheus/client_golang v1.23.2
@@ -14,6 +15,7 @@ require (
 require (
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/bits-and-blooms/bitset v1.24.2 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/fatih/color v1.13.0 // indirect
