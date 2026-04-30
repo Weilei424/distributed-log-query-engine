@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bits-and-blooms/bloom/v3"
 	"github.com/Weilei424/distributed-log-query-engine/internal/index"
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
 	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
@@ -36,6 +37,79 @@ func tokenSet(s string) map[string]struct{} {
 		set[t] = struct{}{}
 	}
 	return set
+}
+
+// matchesNode evaluates whether entry matches the AST node.
+func matchesNode(entry *types.LogEntry, node Node) bool {
+	if node == nil {
+		return true
+	}
+	switch n := node.(type) {
+	case AndNode:
+		return matchesNode(entry, n.Left) && matchesNode(entry, n.Right)
+	case OrNode:
+		return matchesNode(entry, n.Left) || matchesNode(entry, n.Right)
+	case TermNode:
+		_, ok := tokenSet(entry.Message)[n.Token]
+		return ok
+	case FieldNode:
+		return matchField(entry, n.Field, n.Value)
+	}
+	return false
+}
+
+func matchField(entry *types.LogEntry, field, value string) bool {
+	switch strings.ToLower(field) {
+	case "level":
+		return strings.EqualFold(entry.Level, value)
+	case "service":
+		return entry.Service == value
+	case "namespace":
+		return entry.Namespace == value
+	case "message":
+		_, ok := tokenSet(entry.Message)[strings.ToLower(value)]
+		return ok
+	default:
+		return entry.Fields[field] == value
+	}
+}
+
+// bloomDefiniteMiss returns true when the bloom filter guarantees no entry
+// in this segment can match the AST. Only AND-required TermNodes are checked;
+// OR nodes are conservative (never skip).
+func bloomDefiniteMiss(bf *bloom.BloomFilter, node Node) bool {
+	switch n := node.(type) {
+	case AndNode:
+		return bloomDefiniteMiss(bf, n.Left) || bloomDefiniteMiss(bf, n.Right)
+	case OrNode:
+		return false
+	case TermNode:
+		return !bf.TestString(n.Token)
+	case FieldNode:
+		return !bf.TestString(strings.ToLower(n.Value))
+	}
+	return false
+}
+
+// collectTermTokens extracts all TermNode tokens from the AST for index lookup.
+// For OR nodes, no tokens are returned (conservative: either branch might match).
+func collectTermTokens(node Node) []string {
+	if node == nil {
+		return nil
+	}
+	switch n := node.(type) {
+	case AndNode:
+		left := collectTermTokens(n.Left)
+		right := collectTermTokens(n.Right)
+		return append(left, right...)
+	case OrNode:
+		return nil
+	case TermNode:
+		return []string{n.Token}
+	case FieldNode:
+		return nil
+	}
+	return nil
 }
 
 const defaultLimit = 100
@@ -69,39 +143,48 @@ func (e *LocalExecutor) Execute(ctx context.Context, req *types.QueryRequest) (*
 		return nil, fmt.Errorf("query canceled: %w", err)
 	}
 
-	paths := e.index.Resolve(req.Keyword, req.Service, req.StartTime, req.EndTime)
+	ast, err := Parse(req.QueryString)
+	if err != nil {
+		return nil, fmt.Errorf("parse query: %w", err)
+	}
+	var indexTokens []string
+	if ast != nil {
+		indexTokens = collectTermTokens(ast)
+	}
+	paths := e.index.Resolve(indexTokens, req.Namespace, req.Service, req.StartTime, req.EndTime)
+
+	// Bloom-prune: skip segments where bloom guarantees no match.
+	prunedPaths := paths[:0:len(paths)]
+	for _, p := range paths {
+		if bf := e.manager.BloomFor(p); bf != nil && ast != nil {
+			if bloomDefiniteMiss(bf, ast) {
+				continue
+			}
+		}
+		prunedPaths = append(prunedPaths, p)
+	}
 
 	var raw []*types.LogEntry
-	if len(paths) > 0 {
+	if len(prunedPaths) > 0 {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("query canceled before disk read: %w", err)
 		}
 		var err error
-		raw, err = e.manager.ReadSegments(paths)
+		raw, err = e.manager.ReadSegments(prunedPaths)
 		if err != nil {
 			return nil, fmt.Errorf("execute query: %w", err)
 		}
 	}
 
-	// Tokenize the keyword once; match requires all keyword tokens to appear as
-	// exact words in the message. This is consistent with how the index stores tokens.
-	kwTokens := tokenize(req.Keyword)
 	filtered := make([]*types.LogEntry, 0, len(raw))
 	for _, entry := range raw {
-		if len(kwTokens) > 0 {
-			msgTokenSet := tokenSet(entry.Message)
-			match := true
-			for _, kwTok := range kwTokens {
-				if _, found := msgTokenSet[kwTok]; !found {
-					match = false
-					break
-				}
-			}
-			if !match {
-				continue
-			}
+		if req.Namespace != "" && entry.Namespace != req.Namespace {
+			continue
 		}
 		if req.Service != "" && entry.Service != req.Service {
+			continue
+		}
+		if !matchesNode(entry, ast) {
 			continue
 		}
 		if req.StartTime > 0 && entry.Timestamp < req.StartTime {
