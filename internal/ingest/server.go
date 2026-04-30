@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -199,7 +200,16 @@ func (s *Server) ListSegments(_ context.Context, req *logengine.ListSegmentsRequ
 
 // TransferSegment streams the raw bytes of a closed segment file.
 func (s *Server) TransferSegment(req *logengine.TransferSegmentRequest, stream logengine.IngestService_TransferSegmentServer) error {
-	path := filepath.Join(s.manager.Dir(), req.SegmentName)
+	name := req.SegmentName
+	// Reject path traversal attempts and non-.seg names.
+	if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") || !strings.HasSuffix(name, ".seg") {
+		return status.Errorf(codes.InvalidArgument, "invalid segment name: %q", name)
+	}
+	// Reject the active segment — it is still being written and must not be transferred.
+	if name == s.manager.ActiveSegmentName() {
+		return status.Errorf(codes.FailedPrecondition, "segment %q is the active segment", name)
+	}
+	path := filepath.Join(s.manager.Dir(), name)
 	f, err := os.Open(path)
 	if err != nil {
 		return status.Errorf(codes.NotFound, "segment not found: %s", req.SegmentName)
