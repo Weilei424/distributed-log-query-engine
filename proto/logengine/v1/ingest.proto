@@ -21,6 +21,12 @@ service IngestService {
   // FetchShardEntries returns entries for a shard after a given received_at timestamp.
   // Called by a replica node during catch-up after restart.
   rpc FetchShardEntries(FetchShardEntriesRequest) returns (FetchShardEntriesResponse);
+
+  // ListSegments returns the names of closed segment files owned by the given shard.
+  rpc ListSegments(ListSegmentsRequest) returns (ListSegmentsResponse);
+
+  // TransferSegment streams the raw bytes of a closed segment file.
+  rpc TransferSegment(TransferSegmentRequest) returns (stream TransferSegmentResponse);
 }
 
 message IngestRequest {
@@ -63,4 +69,21 @@ message FetchShardEntriesRequest {
 
 message FetchShardEntriesResponse {
   repeated LogEntry entries = 1;
+}
+
+message ListSegmentsRequest {
+  int32 shard_id = 1;
+}
+
+message ListSegmentsResponse {
+  repeated string segment_names = 1;
+}
+
+message TransferSegmentRequest {
+  string segment_name = 1;
+  int32  shard_id     = 2;
+}
+
+message TransferSegmentResponse {
+  bytes chunk = 1;
 }
