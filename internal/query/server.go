@@ -47,12 +47,13 @@ func (s *QueryServer) Query(ctx context.Context, req *logengine.QueryRequest) (*
 	}
 
 	typesReq := &types.QueryRequest{
-		Keyword:   req.Keyword,
-		Service:   req.Service,
-		StartTime: req.StartTime,
-		EndTime:   req.EndTime,
-		Limit:     req.Limit,
-		Offset:    req.Offset,
+		QueryString: req.QueryString,
+		Namespace:   req.Namespace,
+		Service:     req.Service,
+		StartTime:   req.StartTime,
+		EndTime:     req.EndTime,
+		Limit:       req.Limit,
+		Offset:      req.Offset,
 	}
 
 	result, err := s.executor.Execute(ctx, typesReq)
@@ -61,7 +62,8 @@ func (s *QueryServer) Query(ctx context.Context, req *logengine.QueryRequest) (*
 	if err == nil {
 		s.logger.Info("query",
 			zap.String("request_id", reqID),
-			zap.String("keyword", req.Keyword),
+			zap.String("query_string", req.QueryString),
+			zap.String("namespace", req.Namespace),
 			zap.Int64("start_time", req.StartTime),
 			zap.Int64("end_time", req.EndTime),
 			zap.Int("results", len(result.Entries)),
@@ -84,6 +86,7 @@ func (s *QueryServer) Query(ctx context.Context, req *logengine.QueryRequest) (*
 			Id:         e.ID,
 			Timestamp:  e.Timestamp,
 			ReceivedAt: e.ReceivedAt,
+			Namespace:  e.Namespace,
 			Service:    e.Service,
 			Level:      e.Level,
 			Message:    e.Message,
