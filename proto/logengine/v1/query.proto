@@ -13,8 +13,9 @@ service QueryService {
 }
 
 message QueryRequest {
-  // Keyword to search for in log messages.
-  string keyword = 1;
+  // Boolean query string. Supports bare terms, field:value filters, AND/OR operators.
+  // Empty means match-all. Replaces the old keyword field (same field number 1 — wire-compatible rename).
+  string query_string = 1;
 
   // Filter by service name. Empty means all services.
   string service = 2;
@@ -30,22 +31,15 @@ message QueryRequest {
 
   // Number of entries to skip for pagination.
   int32 offset = 6;
+
+  // Filter by namespace. Empty means all namespaces.
+  string namespace = 7;
 }
 
 message QueryResponse {
-  // Matching log entries, sorted by timestamp descending.
   repeated LogEntry entries = 1;
-
-  // Deduplicated candidate count across all responding nodes, before
-  // offset/limit are applied. This is a lower bound: each node is asked for
-  // at most max(fan_out_limit, offset+limit) entries, so if a node holds more
-  // matches than that window, total will undercount. When partial=true, failed
-  // nodes are excluded and total reflects only the responding subset.
-  int32 total = 2;
-
-  // True if one or more nodes did not respond within the deadline.
-  bool partial = 3;
-
-  // Total wall-clock time for the query in milliseconds.
+  // Deduplicated candidate count before offset/limit (see Architecture Notes Decision 7).
+  int32 total   = 2;
+  bool  partial = 3;
   int64 took_ms = 4;
 }
