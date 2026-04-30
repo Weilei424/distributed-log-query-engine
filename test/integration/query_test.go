@@ -37,7 +37,7 @@ func TestQuerySingleNode_Filters(t *testing.T) {
 	}
 
 	t.Run("keyword filter", func(t *testing.T) {
-		result, err := ex.Execute(ctx, &types.QueryRequest{Keyword: "login"})
+		result, err := ex.Execute(ctx, &types.QueryRequest{QueryString: "login"})
 		if err != nil {
 			t.Fatalf("Execute: %v", err)
 		}
@@ -68,7 +68,7 @@ func TestQuerySingleNode_Filters(t *testing.T) {
 
 	t.Run("combined filters", func(t *testing.T) {
 		result, err := ex.Execute(ctx, &types.QueryRequest{
-			Keyword:   "login",
+			QueryString:   "login",
 			Service:   "auth",
 			StartTime: 200,
 			EndTime:   400,
@@ -121,7 +121,7 @@ func TestQuerySingleNode_IndexRebuildAfterRestart(t *testing.T) {
 	ex := query.NewLocalExecutor(idx2, m2)
 
 	t.Run("keyword query after restart", func(t *testing.T) {
-		result, err := ex.Execute(ctx, &types.QueryRequest{Keyword: "token"})
+		result, err := ex.Execute(ctx, &types.QueryRequest{QueryString: "token"})
 		if err != nil {
 			t.Fatalf("Execute: %v", err)
 		}
