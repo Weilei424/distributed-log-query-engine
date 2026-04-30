@@ -1,20 +1,31 @@
-# distributed-log-query-engine
+# Distributed Log Query Engine
 
-A distributed log query engine written in Go. Ingests logs from multiple producers, stores them across nodes using append-only segment files, and executes queries in parallel across the cluster.
-
-Built to demonstrate distributed systems fundamentals: partitioning, replication, cluster coordination, fault tolerance, and distributed query execution.
-
----
+A distributed log storage and query system built in Go. Designed to demonstrate core distributed systems concepts — sharded ingestion, segment-based storage, Raft-backed coordination, and parallel query fan-out — in a codebase small enough to explain end-to-end.
 
 ## Architecture
 
+[Architecture diagram](docs/architecture/diagram.md)
+
 | Component | Responsibility |
 |-----------|---------------|
-| **Ingest path** | Validates log records, computes shard placement, forwards to primary storage node |
-| **Storage node** | Appends logs to local segment files, maintains in-memory index, serves local queries |
-| **Metadata / control plane** | Node registry, shard ownership map, Raft-backed leader election |
-| **Query coordinator** | Fan-out queries to relevant nodes, enforces deadlines, merges and paginates results |
-| **Background workers** | Compaction, index rebuilds, replica catch-up |
+| **Ingest path** | Validates entries, routes by `hash(namespace:service) % shards`, forwards to primary node |
+| **Storage node** | Append-only segment files, in-memory inverted index, optional bloom filter sidecars |
+| **Coordinator (Raft)** | Node registry, shard ownership map, leader election, query fan-out |
+| **Query executor** | Boolean query parser (AND/OR, field:value), index-accelerated local search |
+| **Background workers** | Configurable merge compaction, retention eviction, replica catch-up via segment transfer |
+
+## Features
+
+| Feature | Details |
+|---------|---------|
+| Boolean query language | `error AND level:ERROR`, `timeout OR "connection failed"`, field filters |
+| Namespace isolation | Tenant-aware shard routing; namespace filter propagated through full fan-out path |
+| Bloom filter pruning | Optional `.bloom` sidecar per segment; eliminates segments with guaranteed no-match |
+| Query result cache | TTL + LRU on coordinator; skips fan-out for repeated identical queries |
+| Segment compaction | Merge pass (size threshold) + retention pass (age cutoff), both configurable via env |
+| Segment file transfer | `ListSegments` + streaming `TransferSegment` RPC for replica catch-up |
+| Partial results | Coordinator marks response `partial=true` when any node times out; never blocks |
+| Observability | Prometheus metrics on all nodes and coordinator; structured zap logs with request IDs |
 
 See [`docs/planning/ARCHITECTURE_NOTES.md`](docs/planning/ARCHITECTURE_NOTES.md) for full design decisions and system model.
 
@@ -101,7 +112,7 @@ To walk through a full failure and recovery scenario, see [`docs/runbooks/failur
 | 5 | Distributed ingestion, partitioning, and replication | Complete |
 | 6 | Distributed query fan-out and result aggregation | Complete |
 | 7 | Observability, deployment, and reliability | Complete |
-| 8 | Stretch goals and resume polish | Not started |
+| 8 | Stretch goals and resume polish | Complete |
 
 See [`docs/planning/IMPLEMENTATION_PLAN.md`](docs/planning/IMPLEMENTATION_PLAN.md) for full phase descriptions and success criteria.
 
@@ -112,3 +123,13 @@ See [`docs/planning/IMPLEMENTATION_PLAN.md`](docs/planning/IMPLEMENTATION_PLAN.m
 - [`docs/planning/IMPLEMENTATION_PLAN.md`](docs/planning/IMPLEMENTATION_PLAN.md) — phase roadmap
 - [`docs/planning/ARCHITECTURE_NOTES.md`](docs/planning/ARCHITECTURE_NOTES.md) — design decisions and system model
 - [`docs/planning/BACKLOG.md`](docs/planning/BACKLOG.md) — executable checklist
+- [`docs/architecture/diagram.md`](docs/architecture/diagram.md) — Mermaid architecture diagram
+- [`docs/benchmarks/bloom-filter-results.md`](docs/benchmarks/bloom-filter-results.md) — bloom filter benchmark results
+
+## Design Tradeoffs
+
+- **Async replication** — the primary acknowledges writes before the replica confirms, favouring ingest throughput over strict durability. Under primary failure before replication, the replica may be behind.
+- **In-memory index** — the inverted index lives in RAM and is rebuilt from segments on restart. This bounds startup time by data size but avoids a persistent index dependency.
+- **Partial query results** — when a storage node times out, the coordinator returns what it has with `partial=true`. This keeps queries fast under degraded conditions at the cost of completeness.
+- **Bloom filters as optional sidecar** — enabled via `BLOOM_ENABLED=true`; off by default to keep the common case simple. Sidecars are written atomically on segment rotation.
+- **Namespace routing, not isolation** — namespace affects shard placement and is a filter predicate, not a hard storage boundary. Cross-namespace queries on a single node are possible.
