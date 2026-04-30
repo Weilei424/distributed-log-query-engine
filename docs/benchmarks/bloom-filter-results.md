@@ -9,8 +9,8 @@
 
 | Configuration       | Segments Scanned / Query | p50 Latency (ms) | p95 Latency (ms) |
 |---------------------|--------------------------|------------------|------------------|
-| BLOOM_ENABLED=false | TBD                      | TBD              | TBD              |
-| BLOOM_ENABLED=true  | TBD                      | TBD              | TBD              |
+| BLOOM_ENABLED=false | 2828                     | 11               | 18               |
+| BLOOM_ENABLED=true  | TBD                      | 10               | 16               |
 
 ## Notes
 
