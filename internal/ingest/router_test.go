@@ -6,8 +6,9 @@ import (
 )
 
 func TestShardID_Deterministic(t *testing.T) {
+	first := ShardID("ns1", "api", 8)
 	for i := 0; i < 10; i++ {
-		if ShardID("ns1", "api", 8) != ShardID("ns1", "api", 8) {
+		if ShardID("ns1", "api", 8) != first {
 			t.Fatal("ShardID not deterministic")
 		}
 	}
