@@ -46,7 +46,7 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 		client := logengine.NewIngestServiceClient(conn)
 
 		// Phase 1: transfer missing closed segment files.
-		n := transferMissingSegments(ctx, shardID, manager, idx, client, logger)
+		n := transferMissingSegments(ctx, shardID, totalShards, manager, idx, client, logger)
 		appended += n
 
 		// Phase 2: entry-level catch-up for active segment tail.
@@ -90,7 +90,7 @@ func CatchUp(ctx context.Context, nodeID string, totalShards int, state metadata
 	return appended
 }
 
-func transferMissingSegments(ctx context.Context, shardID int, manager *storage.Manager, idx *index.Index, client logengine.IngestServiceClient, logger *zap.Logger) int {
+func transferMissingSegments(ctx context.Context, shardID, totalShards int, manager *storage.Manager, idx *index.Index, client logengine.IngestServiceClient, logger *zap.Logger) int {
 	listCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	resp, err := client.ListSegments(listCtx, &logengine.ListSegmentsRequest{ShardId: int32(shardID)})
 	cancel()
@@ -98,17 +98,30 @@ func transferMissingSegments(ctx context.Context, shardID int, manager *storage.
 		return 0
 	}
 
-	local := make(map[string]struct{})
-	for _, p := range manager.ListClosedSegments() {
-		local[filepath.Base(p)] = struct{}{}
-	}
-	// Never overwrite the replica's active segment with a closed copy from the primary.
+	// Build a shard-aware "already covered" set. Filename alone is not sufficient:
+	// a co-located replica for another shard may have already transferred a file
+	// under the same name but with only that shard's records inside. We must check
+	// that the local copy actually contains entries for the current shardID.
 	activeName := manager.ActiveSegmentName()
+	local := make(map[string]bool) // filename → has entries for shardID
+	for _, p := range manager.ListClosedSegments() {
+		name := filepath.Base(p)
+		entries, readErr := manager.ReadSegments([]string{p})
+		if readErr != nil {
+			continue
+		}
+		for _, e := range entries {
+			if totalShards == 0 || ShardID(e.Namespace, e.Service, totalShards) == shardID {
+				local[name] = true
+				break
+			}
+		}
+	}
 
 	appended := 0
 	for _, name := range resp.SegmentNames {
-		if _, ok := local[name]; ok {
-			continue
+		if local[name] {
+			continue // already have this shard's data in this local segment
 		}
 		if name == activeName {
 			continue
