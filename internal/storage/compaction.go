@@ -2,9 +2,7 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/Weilei424/distributed-log-query-engine/internal/index"
@@ -103,14 +101,14 @@ func (c *Compactor) mergeRun(paths []string) {
 		return
 	}
 
-	// Allocate a numeric segment name from the manager's sequence counter so
-	// that restarts can always parse the filename as a uint64.
-	c.manager.mu.Lock()
-	newPath := filepath.Join(c.manager.dir, fmt.Sprintf(segmentNameFmt, c.manager.nextSeq))
-	c.manager.nextSeq++
-	c.manager.mu.Unlock()
+	// Write merged data to paths[0]+".tmp", then rename atomically to paths[0].
+	// Reusing paths[0]'s name keeps the merged segment's sequence number below
+	// the active segment's sequence, preserving the restart invariant that the
+	// lexicographically last (or ACTIVE-marked) segment is always the active one.
+	newPath := paths[0]
+	tmpPath := newPath + ".tmp"
 
-	seg, err := OpenSegment(newPath)
+	seg, err := OpenSegment(tmpPath)
 	if err != nil {
 		return
 	}
@@ -120,12 +118,12 @@ func (c *Compactor) mergeRun(paths []string) {
 		pb, err := marshalLogEntry(e)
 		if err != nil {
 			seg.Close()
-			os.Remove(newPath)
+			os.Remove(tmpPath)
 			return
 		}
 		if err := seg.Append(pb); err != nil {
 			seg.Close()
-			os.Remove(newPath)
+			os.Remove(tmpPath)
 			return
 		}
 		if c.manager.bloomEnabled {
@@ -134,48 +132,53 @@ func (c *Compactor) mergeRun(paths []string) {
 	}
 	seg.Close()
 
+	// Remove paths[1:] from disk before renaming so the directory never
+	// contains two entries for the same data.
+	for _, op := range paths[1:] {
+		os.Remove(op)
+		os.Remove(BloomPath(op))
+	}
+	if err := os.Rename(tmpPath, newPath); err != nil {
+		os.Remove(tmpPath)
+		return
+	}
+
+	// Write the new bloom sidecar for paths[0] (overwriting the old one).
 	if c.manager.bloomEnabled && len(tokens) > 0 {
 		bf := BuildBloom(tokens, uint(len(tokens)))
 		_ = WriteBloom(BloomPath(newPath), bf)
 	}
 
-	// Atomically swap old paths for new path in the manager.
+	// Remove paths[1:] from the manager and bloom map; paths[0] stays in place.
 	c.manager.mu.Lock()
-	active := c.manager.paths[len(c.manager.paths)-1]
-	var kept []string
-	for _, p := range c.manager.paths[:len(c.manager.paths)-1] {
-		skip := false
-		for _, op := range paths {
-			if p == op {
-				skip = true
-				break
-			}
-		}
-		if !skip {
-			kept = append(kept, p)
+	skipSet := make(map[string]bool, len(paths)-1)
+	for _, op := range paths[1:] {
+		skipSet[op] = true
+	}
+	out := c.manager.paths[:0:len(c.manager.paths)]
+	for _, p := range c.manager.paths {
+		if !skipSet[p] {
+			out = append(out, p)
 		}
 	}
-	kept = append(kept, newPath)
-	c.manager.paths = append(kept, active)
+	c.manager.paths = out
 	if c.manager.bloomEnabled {
+		for _, op := range paths[1:] {
+			delete(c.manager.blooms, op)
+		}
+		delete(c.manager.blooms, newPath)
 		if bf, err := ReadBloom(BloomPath(newPath)); err == nil {
 			c.manager.blooms[newPath] = bf
-		}
-		for _, op := range paths {
-			delete(c.manager.blooms, op)
 		}
 	}
 	c.manager.mu.Unlock()
 
-	for _, op := range paths {
-		os.Remove(op)
-		os.Remove(BloomPath(op))
-		if c.idx != nil {
+	// Update index: remove stale entries for all merged paths, then re-add
+	// all entries under paths[0] (the merged output).
+	if c.idx != nil {
+		for _, op := range paths {
 			c.idx.RemoveSegment(op)
 		}
-	}
-
-	if c.idx != nil {
 		for _, e := range all {
 			c.idx.Add(e, newPath)
 		}
