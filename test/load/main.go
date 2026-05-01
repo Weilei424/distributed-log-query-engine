@@ -104,7 +104,7 @@ func main() {
 						start := time.Now()
 						resp, err := queryClient.Query(ctx, &logengine.QueryRequest{
 							QueryString: kw,
-							Limit:   20,
+							Limit:       20,
 						})
 						ms := time.Since(start).Milliseconds()
 						if err != nil {

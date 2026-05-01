@@ -20,9 +20,9 @@ type TermNode struct{ Token string }
 // FieldNode represents a field:value filter (e.g. level:error).
 type FieldNode struct{ Field, Value string }
 
-func (AndNode) node()  {}
-func (OrNode) node()   {}
-func (TermNode) node() {}
+func (AndNode) node()   {}
+func (OrNode) node()    {}
+func (TermNode) node()  {}
 func (FieldNode) node() {}
 
 // Parse parses a boolean query string into a Node AST.

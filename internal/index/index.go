@@ -23,11 +23,11 @@ type SegmentMeta struct {
 // It maps message tokens, service names, and namespaces to segment paths, and
 // tracks per-segment time bounds for time-range pruning.
 type Index struct {
-	mu                 sync.RWMutex
-	tokenSegments      map[string]map[string]struct{} // token → set of segment paths
-	serviceSegments    map[string]map[string]struct{} // service → set of segment paths
-	namespaceSegments  map[string]map[string]struct{} // namespace → set of segment paths
-	segmentMeta        map[string]SegmentMeta         // segment path → time bounds
+	mu                sync.RWMutex
+	tokenSegments     map[string]map[string]struct{} // token → set of segment paths
+	serviceSegments   map[string]map[string]struct{} // service → set of segment paths
+	namespaceSegments map[string]map[string]struct{} // namespace → set of segment paths
+	segmentMeta       map[string]SegmentMeta         // segment path → time bounds
 }
 
 // NewIndex returns an initialized empty Index.

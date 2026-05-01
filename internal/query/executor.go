@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bits-and-blooms/bloom/v3"
 	"github.com/Weilei424/distributed-log-query-engine/internal/index"
 	"github.com/Weilei424/distributed-log-query-engine/internal/storage"
 	"github.com/Weilei424/distributed-log-query-engine/pkg/types"
+	"github.com/bits-and-blooms/bloom/v3"
 )
 
 var nonAlphanumeric = regexp.MustCompile(`[^a-z0-9]+`)

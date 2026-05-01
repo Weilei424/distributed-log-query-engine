@@ -68,10 +68,10 @@ func TestQuerySingleNode_Filters(t *testing.T) {
 
 	t.Run("combined filters", func(t *testing.T) {
 		result, err := ex.Execute(ctx, &types.QueryRequest{
-			QueryString:   "login",
-			Service:   "auth",
-			StartTime: 200,
-			EndTime:   400,
+			QueryString: "login",
+			Service:     "auth",
+			StartTime:   200,
+			EndTime:     400,
 		})
 		if err != nil {
 			t.Fatalf("Execute: %v", err)
