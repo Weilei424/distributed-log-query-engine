@@ -2,13 +2,14 @@
 package ingest
 
 import (
+	"bytes"
 	"context"
-	"io"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -198,7 +199,11 @@ func (s *Server) ListSegments(_ context.Context, req *logengine.ListSegmentsRequ
 	return &logengine.ListSegmentsResponse{SegmentNames: names}, nil
 }
 
-// TransferSegment streams the raw bytes of a closed segment file.
+// TransferSegment streams a shard-filtered view of a closed segment file.
+// Only entries belonging to req.ShardId are included, serialized in the same
+// length-prefixed protobuf format used by segment files on disk. This ensures
+// the replica receives a valid segment file containing only its own shard data,
+// even when the source segment holds entries from multiple shards.
 func (s *Server) TransferSegment(req *logengine.TransferSegmentRequest, stream logengine.IngestService_TransferSegmentServer) error {
 	name := req.SegmentName
 	// Reject path traversal attempts and non-.seg names.
@@ -210,44 +215,41 @@ func (s *Server) TransferSegment(req *logengine.TransferSegmentRequest, stream l
 		return status.Errorf(codes.FailedPrecondition, "segment %q is the active segment", name)
 	}
 	path := filepath.Join(s.manager.Dir(), name)
-	// Validate shard membership: at least one entry in the segment must belong
-	// to the requested shard. This prevents leaking data across shards.
-	if s.totalShards > 0 {
-		entries, readErr := s.manager.ReadSegments([]string{path})
-		if readErr != nil {
-			return status.Errorf(codes.NotFound, "segment not found: %s", name)
-		}
-		found := false
-		for _, e := range entries {
-			if ShardID(e.Namespace, e.Service, s.totalShards) == int(req.ShardId) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return status.Errorf(codes.NotFound, "segment %s contains no entries for shard %d", name, req.ShardId)
-		}
-	}
-	f, err := os.Open(path)
+	entries, err := s.manager.ReadSegments([]string{path})
 	if err != nil {
-		return status.Errorf(codes.NotFound, "segment not found: %s", req.SegmentName)
+		return status.Errorf(codes.NotFound, "segment not found: %s", name)
 	}
-	defer f.Close()
 
-	buf := make([]byte, transferChunkSize)
-	for {
-		n, err := f.Read(buf)
-		if n > 0 {
-			if sendErr := stream.Send(&logengine.TransferSegmentResponse{Chunk: buf[:n]}); sendErr != nil {
-				return sendErr
-			}
+	// Build a filtered segment in memory containing only entries for the requested shard.
+	var buf bytes.Buffer
+	for _, e := range entries {
+		if s.totalShards > 0 && ShardID(e.Namespace, e.Service, s.totalShards) != int(req.ShardId) {
+			continue
 		}
-		if err == io.EOF {
-			break
+		pb := EntryToProto(e)
+		data, marshalErr := proto.Marshal(pb)
+		if marshalErr != nil {
+			return status.Errorf(codes.Internal, "marshal entry: %v", marshalErr)
 		}
-		if err != nil {
-			return status.Errorf(codes.Internal, "read segment: %v", err)
+		if writeErr := storage.WriteRecord(&buf, data); writeErr != nil {
+			return status.Errorf(codes.Internal, "write record: %v", writeErr)
 		}
+	}
+	if buf.Len() == 0 {
+		return status.Errorf(codes.NotFound, "segment %s contains no entries for shard %d", name, req.ShardId)
+	}
+
+	// Stream the filtered segment bytes in chunks.
+	payload := buf.Bytes()
+	for len(payload) > 0 {
+		n := transferChunkSize
+		if n > len(payload) {
+			n = len(payload)
+		}
+		if sendErr := stream.Send(&logengine.TransferSegmentResponse{Chunk: payload[:n]}); sendErr != nil {
+			return sendErr
+		}
+		payload = payload[n:]
 	}
 	return nil
 }
