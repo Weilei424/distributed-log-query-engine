@@ -108,6 +108,9 @@ func (c *Compactor) mergeRun(paths []string) {
 	newPath := paths[0]
 	tmpPath := newPath + ".tmp"
 
+	// Remove any leftover temp file from a previous crashed merge so OpenSegment
+	// starts from an empty file rather than appending to stale data.
+	os.Remove(tmpPath)
 	seg, err := OpenSegment(tmpPath)
 	if err != nil {
 		return
@@ -132,12 +135,6 @@ func (c *Compactor) mergeRun(paths []string) {
 	}
 	seg.Close()
 
-	// Remove paths[1:] from disk before renaming so the directory never
-	// contains two entries for the same data.
-	for _, op := range paths[1:] {
-		os.Remove(op)
-		os.Remove(BloomPath(op))
-	}
 	if err := os.Rename(tmpPath, newPath); err != nil {
 		os.Remove(tmpPath)
 		return
@@ -149,7 +146,10 @@ func (c *Compactor) mergeRun(paths []string) {
 		_ = WriteBloom(BloomPath(newPath), bf)
 	}
 
-	// Remove paths[1:] from the manager and bloom map; paths[0] stays in place.
+	// Update the manager path list and bloom map BEFORE deleting from disk.
+	// Concurrent queries that already hold a reference to paths[1:] will get
+	// ENOENT when they open those files after the disk delete; ReadSegments
+	// treats ENOENT as an empty segment so they degrade gracefully.
 	c.manager.mu.Lock()
 	skipSet := make(map[string]bool, len(paths)-1)
 	for _, op := range paths[1:] {
@@ -173,15 +173,23 @@ func (c *Compactor) mergeRun(paths []string) {
 	}
 	c.manager.mu.Unlock()
 
-	// Update index: remove stale entries for all merged paths, then re-add
-	// all entries under paths[0] (the merged output).
+	// Update the index BEFORE deleting from disk for the same reason.
+	// Only remove paths[1:] from the index; paths[0] keeps its entry and
+	// we extend its coverage to include the newly merged entries.
 	if c.idx != nil {
-		for _, op := range paths {
+		for _, op := range paths[1:] {
 			c.idx.RemoveSegment(op)
 		}
 		for _, e := range all {
 			c.idx.Add(e, newPath)
 		}
+	}
+
+	// Disk deletes are last: by now the index and manager no longer reference
+	// paths[1:], so no new query will try to open them.
+	for _, op := range paths[1:] {
+		os.Remove(op)
+		os.Remove(BloomPath(op))
 	}
 }
 
@@ -204,12 +212,14 @@ func (c *Compactor) runRetentionPass() {
 			}
 		}
 		if maxTS > 0 && maxTS < cutoff {
+			// Remove from manager and index before disk delete so concurrent
+			// readers never get a file-not-found for a path they just resolved.
 			c.manager.DeleteSegment(path)
-			os.Remove(path)
-			os.Remove(BloomPath(path))
 			if c.idx != nil {
 				c.idx.RemoveSegment(path)
 			}
+			os.Remove(path)
+			os.Remove(BloomPath(path))
 		}
 	}
 }
