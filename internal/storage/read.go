@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -53,12 +54,17 @@ func storageProtoToEntry(pb *logengine.LogEntry) *types.LogEntry {
 }
 
 // ReadSegments reads all entries from the given segment paths in order.
-// Returns a wrapped error if any segment cannot be read.
+// Paths that no longer exist on disk are silently skipped; this handles
+// in-flight readers that resolved a path before compaction removed it.
+// Returns a wrapped error for any other read failure.
 func (m *Manager) ReadSegments(paths []string) ([]*types.LogEntry, error) {
 	var all []*types.LogEntry
 	for _, path := range paths {
 		entries, err := ReadSegment(path)
 		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
 			return nil, fmt.Errorf("read segments: %w", err)
 		}
 		all = append(all, entries...)
