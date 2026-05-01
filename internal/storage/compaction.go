@@ -135,21 +135,49 @@ func (c *Compactor) mergeRun(paths []string) {
 	}
 	seg.Close()
 
+	// Remove ALL merged paths from the index BEFORE renaming the temp file over
+	// paths[0]. This closes the duplicate window: no query can simultaneously
+	// read merged paths[0] (new data) and still-indexed paths[1:] (old data).
+	// There is a brief window where merged data is invisible to new queries;
+	// that is acceptable for a background compaction operation.
+	if c.idx != nil {
+		for _, op := range paths {
+			c.idx.RemoveSegment(op)
+		}
+	}
+
 	if err := os.Rename(tmpPath, newPath); err != nil {
+		// Rename failed; restore the index from the still-present old files.
 		os.Remove(tmpPath)
+		if c.idx != nil {
+			for _, op := range paths {
+				restored, readErr := c.manager.ReadSegments([]string{op})
+				if readErr == nil {
+					for _, e := range restored {
+						c.idx.Add(e, op)
+					}
+				}
+			}
+		}
 		return
 	}
 
-	// Write the new bloom sidecar for paths[0] (overwriting the old one).
+	// Write bloom sidecar for paths[0] (the merged output).
 	if c.manager.bloomEnabled && len(tokens) > 0 {
 		bf := BuildBloom(tokens, uint(len(tokens)))
 		_ = WriteBloom(BloomPath(newPath), bf)
 	}
 
-	// Update the manager path list and bloom map BEFORE deleting from disk.
-	// Concurrent queries that already hold a reference to paths[1:] will get
-	// ENOENT when they open those files after the disk delete; ReadSegments
-	// treats ENOENT as an empty segment so they degrade gracefully.
+	// Re-add all merged entries under paths[0]. New queries can now see the
+	// merged data. Entries from paths[0]'s old content are implicitly included
+	// since all was read from all paths before the merge.
+	if c.idx != nil {
+		for _, e := range all {
+			c.idx.Add(e, newPath)
+		}
+	}
+
+	// Update manager path list and bloom map (removes paths[1:]).
 	c.manager.mu.Lock()
 	skipSet := make(map[string]bool, len(paths)-1)
 	for _, op := range paths[1:] {
@@ -173,20 +201,7 @@ func (c *Compactor) mergeRun(paths []string) {
 	}
 	c.manager.mu.Unlock()
 
-	// Update the index BEFORE deleting from disk for the same reason.
-	// Only remove paths[1:] from the index; paths[0] keeps its entry and
-	// we extend its coverage to include the newly merged entries.
-	if c.idx != nil {
-		for _, op := range paths[1:] {
-			c.idx.RemoveSegment(op)
-		}
-		for _, e := range all {
-			c.idx.Add(e, newPath)
-		}
-	}
-
-	// Disk deletes are last: by now the index and manager no longer reference
-	// paths[1:], so no new query will try to open them.
+	// Disk deletes are last: index and manager no longer reference paths[1:].
 	for _, op := range paths[1:] {
 		os.Remove(op)
 		os.Remove(BloomPath(op))
