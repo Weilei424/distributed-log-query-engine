@@ -210,6 +210,24 @@ func (s *Server) TransferSegment(req *logengine.TransferSegmentRequest, stream l
 		return status.Errorf(codes.FailedPrecondition, "segment %q is the active segment", name)
 	}
 	path := filepath.Join(s.manager.Dir(), name)
+	// Validate shard membership: at least one entry in the segment must belong
+	// to the requested shard. This prevents leaking data across shards.
+	if s.totalShards > 0 {
+		entries, readErr := s.manager.ReadSegments([]string{path})
+		if readErr != nil {
+			return status.Errorf(codes.NotFound, "segment not found: %s", name)
+		}
+		found := false
+		for _, e := range entries {
+			if ShardID(e.Namespace, e.Service, s.totalShards) == int(req.ShardId) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return status.Errorf(codes.NotFound, "segment %s contains no entries for shard %d", name, req.ShardId)
+		}
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return status.Errorf(codes.NotFound, "segment not found: %s", req.SegmentName)
