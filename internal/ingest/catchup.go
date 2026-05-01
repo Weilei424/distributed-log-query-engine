@@ -147,7 +147,9 @@ func transferMissingSegments(ctx context.Context, shardID int, manager *storage.
 				break
 			}
 		}
-		f.Sync()
+		if err := f.Sync(); err != nil {
+			ok = false
+		}
 		f.Close()
 		cancel()
 
