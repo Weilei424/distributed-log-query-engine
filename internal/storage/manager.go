@@ -21,7 +21,10 @@ import (
 
 var nonAlphanumericRe = regexp.MustCompile(`[^a-z0-9]+`)
 
-const segmentNameFmt = "%020d.seg"
+const (
+	segmentNameFmt   = "%020d.seg"
+	activeMarkerFile = "ACTIVE"
+)
 
 // Manager owns the data directory and the active segment.
 // It is safe for concurrent use.
@@ -46,7 +49,7 @@ func WithNodeID(id string) ManagerOption {
 }
 
 // NewManager opens or creates dir, scans for existing *.seg files,
-// and reopens the most recent one as the active segment.
+// and reopens the correct active segment.
 // Creates the first segment if the directory is empty.
 func NewManager(dir string, maxSegmentBytes int64, opts ...ManagerOption) (*Manager, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -59,10 +62,35 @@ func NewManager(dir string, maxSegmentBytes int64, opts ...ManagerOption) (*Mana
 	}
 	sort.Strings(matches)
 
-	nextSeq, err := nextSeqFromMatches(matches)
-	if err != nil {
-		return nil, err
+	// Determine which segment is active using the marker written by openNewSegment.
+	// This is necessary because transferred or compacted segments may have sequence
+	// numbers higher than the true active segment, making lexicographic order unreliable.
+	activePath := ""
+	if data, readErr := os.ReadFile(filepath.Join(dir, activeMarkerFile)); readErr == nil {
+		candidate := filepath.Join(dir, strings.TrimSpace(string(data)))
+		if _, statErr := os.Stat(candidate); statErr == nil {
+			activePath = candidate
+		}
 	}
+	// Fall back to lexicographic last on first boot or if marker is stale.
+	if activePath == "" && len(matches) > 0 {
+		activePath = matches[len(matches)-1]
+	}
+
+	// Ensure the active segment is the last entry in paths so the manager
+	// invariant m.paths[len-1] == active is preserved even after transferred
+	// segments with higher sequence numbers are present on disk.
+	if activePath != "" && len(matches) > 0 && activePath != matches[len(matches)-1] {
+		reordered := make([]string, 0, len(matches))
+		for _, p := range matches {
+			if p != activePath {
+				reordered = append(reordered, p)
+			}
+		}
+		matches = append(reordered, activePath)
+	}
+
+	nextSeq := nextSeqFromMatches(matches)
 
 	m := &Manager{
 		dir:             dir,
@@ -76,12 +104,12 @@ func NewManager(dir string, maxSegmentBytes int64, opts ...ManagerOption) (*Mana
 		opt(m)
 	}
 
-	if len(matches) == 0 {
+	if activePath == "" {
 		if err := m.openNewSegment(); err != nil {
 			return nil, err
 		}
 	} else {
-		seg, err := OpenSegment(matches[len(matches)-1])
+		seg, err := OpenSegment(activePath)
 		if err != nil {
 			return nil, fmt.Errorf("reopen active segment: %w", err)
 		}
@@ -195,6 +223,9 @@ func (m *Manager) openNewSegment() error {
 	m.active = seg
 	m.paths = append(m.paths, path)
 	m.nextSeq++
+	// Record the active segment name so restart can find it even when transferred
+	// or compacted segments have higher sequence numbers on disk.
+	_ = os.WriteFile(filepath.Join(m.dir, activeMarkerFile), []byte(name), 0o644)
 	return nil
 }
 
@@ -340,18 +371,15 @@ func (m *Manager) ActiveSegmentName() string {
 	return filepath.Base(m.paths[len(m.paths)-1])
 }
 
-// nextSeqFromMatches returns the next sequence number by scanning from the end
-// of matches for the highest numerically-named file. Skips non-numeric names
-// (e.g. compacted-* from older builds) so compaction cannot break restarts.
-// Falls back to 1 if no numeric name is found.
-func nextSeqFromMatches(matches []string) (uint64, error) {
-	for i := len(matches) - 1; i >= 0; i-- {
-		base := filepath.Base(matches[i])
-		base = strings.TrimSuffix(base, ".seg")
-		n, err := strconv.ParseUint(base, 10, 64)
-		if err == nil {
-			return n + 1, nil
+// nextSeqFromMatches returns the next sequence number as max(all numeric names) + 1.
+// Skips non-numeric filenames. Returns 1 when no numeric names are present.
+func nextSeqFromMatches(matches []string) uint64 {
+	var maxSeq uint64
+	for _, p := range matches {
+		base := strings.TrimSuffix(filepath.Base(p), ".seg")
+		if n, err := strconv.ParseUint(base, 10, 64); err == nil && n > maxSeq {
+			maxSeq = n
 		}
 	}
-	return 1, nil
+	return maxSeq + 1
 }
