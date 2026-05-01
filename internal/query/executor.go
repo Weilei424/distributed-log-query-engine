@@ -176,6 +176,22 @@ func (e *LocalExecutor) Execute(ctx context.Context, req *types.QueryRequest) (*
 		}
 	}
 
+	// Deduplicate by entry ID. Segments can transiently contain overlapping
+	// entries during a compaction merge window; deduplicating here ensures
+	// correct Total counts and no repeated entries in results.
+	if len(raw) > 0 {
+		seen := make(map[string]struct{}, len(raw))
+		j := 0
+		for _, entry := range raw {
+			if _, dup := seen[entry.ID]; !dup {
+				seen[entry.ID] = struct{}{}
+				raw[j] = entry
+				j++
+			}
+		}
+		raw = raw[:j]
+	}
+
 	filtered := make([]*types.LogEntry, 0, len(raw))
 	for _, entry := range raw {
 		if req.Namespace != "" && entry.Namespace != req.Namespace {
